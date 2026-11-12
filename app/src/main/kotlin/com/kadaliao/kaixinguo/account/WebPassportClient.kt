@@ -140,15 +140,21 @@ internal class WebPassportClient {
 
     private fun checked(json: JSONObject): JSONObject {
         val data = json.optJSONObject("data")
-        if (json.optString("message") == "success" && data != null) return data
-        val code = data?.optInt("error_code", -1) ?: -1
+        val challenge = data?.has("verify_center_decision_conf") == true ||
+            json.has("verify_center_decision_conf")
+        val code = data?.optInt("error_code", json.optInt("error_code", -1))
+            ?: json.optInt("error_code", -1)
+        // A success envelope may still require a platform challenge.
+        if (json.optString("message") == "success" && data != null &&
+            !challenge && code <= 0) return data
         throw PassportException(code, when {
-            code == 1105 || data?.has("verify_center_decision_conf") == true ->
+            code == 1105 || challenge ->
                 "平台要求滑块或人工验证，请使用「网页内登录」"
             code == 1102 -> "验证码错误，请重新输入"
             code == 1103 || code == 1104 -> "验证码已过期"
             code == 1206 || code == 1106 -> "操作频繁，请稍后再试"
             code == 13 || code == 1003 -> "登录会话已过期"
+            code == 2046 -> "短信登录设备身份被平台拒绝，可使用网页内登录"
             else -> "登录接口不可用（错误码 " + code + "）"
         })
     }
@@ -292,3 +298,22 @@ internal class PassportException(val code: Int, message: String) : IOException(m
 
 /** Stable HTTP status only; never attach an upstream URL or response body. */
 internal class PassportHttpException(val status: Int) : IOException("认证服务 HTTP $status")
+
+/** Whitelisted diagnostic classes. The provider response and phone are never logged. */
+internal fun passportErrorClass(error: Exception): String = when (error) {
+    is PassportHttpException -> when (error.status) {
+        401, 403 -> "sms_http_auth_blocked"
+        429 -> "sms_http_rate_limited"
+        in 500..599 -> "sms_http_server_error"
+        else -> "sms_http_other"
+    }
+    is PassportException -> when (error.code) {
+        1105 -> "sms_challenge_required"
+        1102, 1202 -> "sms_code_invalid"
+        1103, 1104 -> "sms_code_expired"
+        1106, 1107, 1206 -> "sms_rate_limited"
+        2046 -> "sms_device_rejected"
+        else -> "sms_passport_rejected"
+    }
+    else -> "sms_transport_or_format_error"
+}
