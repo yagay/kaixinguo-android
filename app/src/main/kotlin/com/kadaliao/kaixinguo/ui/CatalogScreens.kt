@@ -104,10 +104,12 @@ fun DiscoverScreen() {
             )
         }
     }) {
-        FeedGrid(feed, "暂时没有推荐", refresh = {
-            if (session.signedIn) account.retryAccountRecommendations()
-            else model.home.refresh(merging = true)
-        })
+        FeedKey(feed) {
+            FeedGrid(feed, "暂时没有推荐", refresh = {
+                if (session.signedIn) account.retryAccountRecommendations()
+                else model.home.refresh(merging = true)
+            })
+        }
     }
 }
 
