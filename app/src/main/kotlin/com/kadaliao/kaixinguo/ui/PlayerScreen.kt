@@ -254,7 +254,7 @@ private fun playerKey(player: Player, key: Key): Boolean {
 
 /** PlayerWindow darkens the system bars around the video, hides them when it fills the screen, and keeps the screen on while it plays. */
 @Composable
-private fun PlayerWindow(hideBars: Boolean, keepOn: Boolean) {
+internal fun PlayerWindow(hideBars: Boolean, keepOn: Boolean) {
     val view = LocalView.current
     val window = LocalActivity.current?.window ?: return
     val controller = remember(window, view) { WindowCompat.getInsetsController(window, view) }
@@ -398,7 +398,7 @@ private fun VideoArea(hud: PlayerHud, edge: Boolean, chrome: Boolean, rotation: 
 
 /** VideoSurface shows the video, fitted to its frame, black around it. */
 @Composable
-private fun VideoSurface(modifier: Modifier) {
+internal fun VideoSurface(modifier: Modifier) {
     val video = LocalVideo.current
     AndroidView(
         factory = { ctx ->
