@@ -29,8 +29,42 @@ internal open class AccountProtocolException(
 internal fun JSONObject.str(key: String): String =
     if (isNull(key)) "" else opt(key)?.toString()?.trim().orEmpty()
 
+/** Keep 16+ digit JSON identifiers lossless on Android's JSONTokener. */
+internal fun preserveLargeAccountIntegers(raw: String): String {
+    val out = StringBuilder(raw.length)
+    var index = 0
+    var quoted = false
+    var escaped = false
+    while (index < raw.length) {
+        val c = raw[index]
+        if (quoted) {
+            out.append(c)
+            if (escaped) escaped = false
+            else if (c == '\\') escaped = true
+            else if (c == '"') quoted = false
+            index++
+        } else if (c == '"') {
+            out.append(c)
+            quoted = true
+            index++
+        } else if (c == '-' || c in '0'..'9') {
+            val start = index++
+            while (index < raw.length && (raw[index] in '0'..'9' || raw[index] in ".eE+-"))
+                index++
+            val number = raw.substring(start, index)
+            if (number.matches(Regex("[0-9]{16,}")))
+                out.append('"').append(number).append('"')
+            else out.append(number)
+        } else {
+            out.append(c)
+            index++
+        }
+    }
+    return out.toString()
+}
+
 internal fun parseObject(body: String): JSONObject = try {
-    JSONObject(body)
+    JSONObject(preserveLargeAccountIntegers(body))
 } catch (_: Exception) {
     throw AccountProtocolException("账号接口响应格式异常")
 }
