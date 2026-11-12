@@ -39,3 +39,11 @@ interface CloudAccountPort {
 
 data class CloudSeries(val seriesId: String, val title: String, val cover: String)
 data class CloudWatch(val series: CloudSeries, val episode: Int, val positionMs: Long)
+
+/** Website records are read-only and never merged with anonymous App records. */
+data class WebsiteHistoryUiState(
+    val records: List<CloudWatch> = emptyList(),
+    val loading: Boolean = false,
+    val loaded: Boolean = false,
+    val error: String = "",
+)

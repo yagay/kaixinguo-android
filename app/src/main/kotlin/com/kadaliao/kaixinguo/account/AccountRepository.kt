@@ -25,6 +25,7 @@ class AccountRepository internal constructor(
     private val gateway: WebsiteAccountGateway,
     private val scope: CoroutineScope,
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    private val historyGateway: WebsiteHistoryGateway = OfficialWebsiteHistoryGateway(),
 ) {
     constructor(context: Context) : this(
         AccountStore(context), OfficialWebsiteGateway(),
@@ -35,6 +36,8 @@ class AccountRepository internal constructor(
     private var generation = 0L
     private val mutable = MutableStateFlow(AccountUiState(phase = AccountPhase.RESTORING))
     val state: StateFlow<AccountUiState> = mutable.asStateFlow()
+    private val historyMutable = MutableStateFlow(WebsiteHistoryUiState())
+    val websiteHistory: StateFlow<WebsiteHistoryUiState> = historyMutable.asStateFlow()
 
     init {
         restore()
@@ -43,6 +46,7 @@ class AccountRepository internal constructor(
     fun restore() {
         val token = synchronized(guard) { ++generation }
         mutable.value = AccountUiState(phase = AccountPhase.RESTORING)
+        historyMutable.value = WebsiteHistoryUiState()
         scope.launch {
             val saved = try {
                 withContext(io) { synchronized(guard) { store.load() } }
@@ -71,6 +75,7 @@ class AccountRepository internal constructor(
             return
         }
         val token = synchronized(guard) { ++generation }
+        historyMutable.value = WebsiteHistoryUiState()
         mutable.value = AccountUiState(
             phase = AccountPhase.VERIFYING,
             hasSavedSession = hadSavedSession,
@@ -123,12 +128,47 @@ class AccountRepository internal constructor(
         restore()
     }
 
+    /** Read-only website history. It cannot grant access to the signed App cloud. */
+    fun loadWebsiteHistory() {
+        if (!mutable.value.websiteSignedIn) return
+        val token = synchronized(guard) { generation }
+        historyMutable.value = historyMutable.value.copy(loading = true, error = "")
+        Diagnostics.record("account", "website_history_requested")
+        scope.launch {
+            try {
+                val history = withContext(io) {
+                    val saved = synchronized(guard) {
+                        if (generation == token) store.load() else null
+                    } ?: throw WebsiteAuthException()
+                    historyGateway.readHistory(saved.cookie)
+                }
+                if (!isCurrent(token) || !mutable.value.websiteSignedIn) return@launch
+                historyMutable.value = WebsiteHistoryUiState(
+                    records = history, loading = false, loaded = true,
+                )
+                Diagnostics.record("account", "website_history_loaded")
+            } catch (_: WebsiteAuthException) {
+                if (isCurrent(token)) historyMutable.value = WebsiteHistoryUiState(
+                    error = "官网历史访问未授权，请重新登录",
+                )
+                Diagnostics.record("account", "website_history_unauthorized")
+            } catch (_: Exception) {
+                if (isCurrent(token)) historyMutable.value = historyMutable.value.copy(
+                    loading = false,
+                    error = "官网历史接口暂不可用，或返回结构发生变化。不会影响本机观看历史。",
+                )
+                Diagnostics.record("account", "website_history_unavailable")
+            }
+        }
+    }
+
     fun signOut() {
         synchronized(guard) {
             generation++
             store.clear()
         }
         mutable.value = AccountUiState(message = "已退出官网账号，本机收藏和历史未清除")
+        historyMutable.value = WebsiteHistoryUiState()
         Diagnostics.record("account", "signed_out")
     }
 
