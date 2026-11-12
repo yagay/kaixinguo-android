@@ -35,6 +35,7 @@ class AccountRepository internal constructor(
 
     private val guard = Any()
     private var generation = 0L
+    private var recommendationEpoch = 0L
     private val mutable = MutableStateFlow(AccountUiState(phase = AccountPhase.RESTORING))
     val state: StateFlow<AccountUiState> = mutable.asStateFlow()
     private var recommendationProof: BusinessIdentity? = null
@@ -141,7 +142,10 @@ class AccountRepository internal constructor(
     }
 
     private fun resetRecommendations() {
-        synchronized(guard) { recommendationProof = null }
+        synchronized(guard) {
+            recommendationEpoch++
+            recommendationProof = null
+        }
         recommendationMutable.value = AccountRecommendationState()
     }
 
@@ -149,7 +153,10 @@ class AccountRepository internal constructor(
     fun retryAccountRecommendations() {
         if (!mutable.value.websiteSignedIn) return
         val attempt = recommendationMutable.value.attempt + 1
-        synchronized(guard) { recommendationProof = null }
+        synchronized(guard) {
+            recommendationEpoch++
+            recommendationProof = null
+        }
         recommendationMutable.value = AccountRecommendationState(attempt = attempt)
         Diagnostics.record("account_recommendations", "retry_requested")
     }
@@ -158,8 +165,8 @@ class AccountRepository internal constructor(
      * This is the only credentialed feed entrypoint. Cookies never leave the
      * repository and are never passed through Compose, SDK, logs or disk cache.
      */
-    suspend fun fetchAccountRecommendations(cursor: String): AccountRecommendPage {
-        val token = synchronized(guard) { generation }
+    internal suspend fun fetchAccountRecommendations(cursor: String): AccountRecommendPage {
+        val (token, epoch) = synchronized(guard) { generation to recommendationEpoch }
         if (!mutable.value.websiteSignedIn) {
             throw AccountRecommendationException(AccountRecommendationException.Kind.EXPIRED)
         }
@@ -173,19 +180,19 @@ class AccountRepository internal constructor(
         try {
             val response = withContext(io) {
                 val saved = synchronized(guard) {
-                    if (generation == token) store.load() else null
+                    if (generation == token && recommendationEpoch == epoch) store.load() else null
                 } ?: throw AccountRecommendationException(AccountRecommendationException.Kind.EXPIRED)
                 val proof = synchronized(guard) {
-                    if (generation == token) recommendationProof else null
+                    if (generation == token && recommendationEpoch == epoch) recommendationProof else null
                 } ?: recommendationPort.verifyBusinessIdentity(saved.cookie).also {
                     synchronized(guard) {
-                        if (generation == token) recommendationProof = it
+                        if (generation == token && recommendationEpoch == epoch) recommendationProof = it
                     }
                 }
-                if (!isCurrent(token)) throw CancellationException("Account changed")
+                if (!isCurrentRecommendation(token, epoch)) throw CancellationException("Account changed")
                 recommendationPort.page(saved.cookie, cursor, proof)
             }
-            if (!isCurrent(token) || !mutable.value.websiteSignedIn) {
+            if (!isCurrentRecommendation(token, epoch) || !mutable.value.websiteSignedIn) {
                 throw CancellationException("Account changed")
             }
             recommendationMutable.value = recommendationMutable.value.copy(
@@ -197,7 +204,7 @@ class AccountRepository internal constructor(
         } catch (stop: CancellationException) {
             throw stop
         } catch (failure: Exception) {
-            if (isCurrent(token)) {
+            if (isCurrentRecommendation(token, epoch)) {
                 val issue = failure as? AccountRecommendationException
                 val phase = when (issue?.kind) {
                     AccountRecommendationException.Kind.SIGNATURE_REQUIRED ->
@@ -264,6 +271,7 @@ class AccountRepository internal constructor(
         val token = synchronized(guard) {
             generation++
             recommendationProof = null
+            recommendationEpoch++
             store.clear()
             generation
         }
@@ -308,4 +316,7 @@ class AccountRepository internal constructor(
     }
 
     private fun isCurrent(token: Long): Boolean = synchronized(guard) { token == generation }
+
+    private fun isCurrentRecommendation(token: Long, epoch: Long): Boolean =
+        synchronized(guard) { token == generation && epoch == recommendationEpoch }
 }
