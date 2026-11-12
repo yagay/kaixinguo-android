@@ -81,6 +81,9 @@ dependencies {
     // 所以要写明类型；它依赖的 kotlinx-coroutines-core 由下面的 coroutines-android 带进来。
     implementation(libs.openhongguo) { artifact { type = "aar" } }
     implementation(libs.coroutines.android)
+    // GPL-3.0 App Passport signer and transport (see NOTICE-THIRD-PARTY.md).
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.80")
     implementation(libs.androidx.core)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime)
