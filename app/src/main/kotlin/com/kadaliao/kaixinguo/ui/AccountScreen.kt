@@ -250,6 +250,21 @@ fun AccountScreen() {
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    // When the platform requires a slider or rejects the
+                    // website SMS endpoint, let the user complete the official
+                    // login directly; do not silently resend a verification SMS.
+                    if (loginMode == 1 && passportState.phase == PassportPhase.FAILED) {
+                        TextButton(
+                            onClick = {
+                                passport.cancel()
+                                smsCode = ""
+                                startOfficialLogin.launch(
+                                    Intent(context, OfficialSignInActivity::class.java),
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("转到官网完成短信或滑块验证") }
+                    }
                     if (passportState.phase in listOf(
                         PassportPhase.QR_LOADING, PassportPhase.SMS_SENDING,
                         PassportPhase.SMS_VERIFYING,
