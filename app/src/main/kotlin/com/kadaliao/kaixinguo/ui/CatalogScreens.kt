@@ -32,8 +32,6 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.RemoveCircleOutline
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.ManageAccounts
-import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -46,7 +44,6 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -233,10 +230,7 @@ fun HotView() {
 fun MineScreen() {
     val model = LocalModel.current
     val router = LocalRouter.current
-    val app = LocalContext.current.applicationContext as KaixinguoApplication
-    val follows = app.follows
-    val accountState by app.account.state.collectAsState()
-    val accountRecommendation by app.account.recommendations.collectAsState()
+    val follows = (LocalContext.current.applicationContext as KaixinguoApplication).follows
     val watched = model.history.list.take(30)
     val saved = model.favorites.cards
     Page("我的", actions = {
@@ -245,52 +239,6 @@ fun MineScreen() {
         }
     }) {
         CardGrid {
-            line("account-card") {
-                Row(
-                    Modifier.fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .clickable { router.open(Route.Account) }
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Icon(Icons.Outlined.ManageAccounts, contentDescription = null)
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            accountState.profile?.nickname?.takeIf(String::isNotBlank)
-                                ?: "登录红果账号",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            when {
-                                !accountState.websiteSignedIn -> "查看登录方式、账号与同步状态"
-                                accountRecommendation.ready -> "官网已登录 · App 账号推荐已验证"
-                                else -> "官网已登录 · App 个性化推荐待验证"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Icon(Icons.Outlined.ChevronRight, contentDescription = "进入账号与同步")
-                }
-            }
-            line("local-statistics") {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    Text(
-                        "本机收藏 ${saved.size}",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Text(
-                        "最近观看 ${model.history.list.size}",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-            }
             if (watched.isNotEmpty()) {
                 line("watched-title") { SectionTitle("最近观看") }
                 line("watched") {
