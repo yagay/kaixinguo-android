@@ -13,7 +13,8 @@ val keystore = Properties().apply {
 
 android {
     namespace = "com.kadaliao.kaixinguo"
-    compileSdk = 37
+    // CI may override the compile platform when its SDK mirror lacks API 37.
+    compileSdk = (findProperty("kxg.compileSdk") as String?)?.toIntOrNull() ?: 37
 
     defaultConfig {
         applicationId = "com.kadaliao.kaixinguo"
