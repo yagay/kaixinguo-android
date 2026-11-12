@@ -226,23 +226,6 @@ fun ReelsScreen(inPip: Boolean) {
                     Icon(Icons.Filled.Refresh, contentDescription = "刷新刷剧列表", tint = Color.White)
                 }
             }
-            if (channel == Channel.RECOMMEND) {
-                val recommendationLabel = when {
-                    verifiedAccountSource -> "红果 App 账号推荐（网关已验证）"
-                    !accountSession.websiteSignedIn -> "普通推荐 · 可在我的页面登录账号"
-                    accountRecommendation.message.isNotBlank() ->
-                        "普通推荐 · " + accountRecommendation.message
-                    else -> "普通推荐 · 正在验证账号推荐"
-                }
-                Text(
-                    recommendationLabel,
-                    color = Color.White.copy(alpha = 0.85f),
-                    fontSize = 11.sp,
-                    maxLines = 2,
-                    modifier = Modifier.align(Alignment.TopCenter)
-                        .statusBarsPadding().padding(top = 57.dp, start = 16.dp, end = 16.dp),
-                )
-            }
         }
     }
 }
