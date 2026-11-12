@@ -116,6 +116,85 @@ class AccountRepositoryTest {
     }
 
     @Test
+    fun websiteHistoryIsolatedFromLocalAndClearedOnLogout() = runTest {
+        val store = MemoryStore()
+        val records = listOf(CloudWatch(CloudSeries("12345", "Test", ""), 2, 1000))
+        val repo = AccountRepository(
+            store,
+            Gateway { WebsiteProfile("Account", "id-1") },
+            this,
+            StandardTestDispatcher(testScheduler),
+            historyGateway = object : WebsiteHistoryGateway {
+                override fun readHistory(cookie: String): List<CloudWatch> {
+                    assertEquals("sessionid=sample", cookie)
+                    return records
+                }
+            },
+        )
+        advanceUntilIdle()
+        repo.signInWithOfficialWebsite("sessionid=sample")
+        advanceUntilIdle()
+        repo.loadWebsiteHistory()
+        advanceUntilIdle()
+        assertTrue(repo.websiteHistory.value.loaded)
+        assertEquals(records, repo.websiteHistory.value.records)
+        repo.signOut()
+        advanceUntilIdle()
+        assertTrue(repo.websiteHistory.value.records.isEmpty())
+        assertFalse(repo.websiteHistory.value.loaded)
+    }
+
+    @Test
+    fun websiteHistoryFailureDoesNotInvalidateAccountOrEraseRecords() = runTest {
+        var failures = false
+        val store = MemoryStore()
+        val repo = AccountRepository(
+            store,
+            Gateway { WebsiteProfile("Account", "id-1") },
+            this,
+            StandardTestDispatcher(testScheduler),
+            historyGateway = object : WebsiteHistoryGateway {
+                override fun readHistory(cookie: String): List<CloudWatch> {
+                    if (failures) throw IOException("Protocol changed")
+                    return listOf(CloudWatch(CloudSeries("123", "Earlier", ""), 1, 0))
+                }
+            },
+        )
+        advanceUntilIdle()
+        repo.signInWithOfficialWebsite("sessionid=sample")
+        advanceUntilIdle()
+        repo.loadWebsiteHistory()
+        advanceUntilIdle()
+        failures = true
+        repo.loadWebsiteHistory()
+        advanceUntilIdle()
+        assertEquals(AccountPhase.WEBSITE_SIGNED_IN, repo.state.value.phase)
+        assertEquals(1, repo.websiteHistory.value.records.size)
+        assertTrue(repo.websiteHistory.value.error.isNotBlank())
+    }
+
+    @Test
+    fun signedOutAccountCannotStartWebsiteHistoryRequests() = runTest {
+        var attempts = 0
+        val repo = AccountRepository(
+            MemoryStore(),
+            Gateway { WebsiteProfile("Account") },
+            this,
+            StandardTestDispatcher(testScheduler),
+            historyGateway = object : WebsiteHistoryGateway {
+                override fun readHistory(cookie: String): List<CloudWatch> {
+                    attempts++
+                    return emptyList()
+                }
+            },
+        )
+        advanceUntilIdle()
+        repo.loadWebsiteHistory()
+        advanceUntilIdle()
+        assertEquals(0, attempts)
+    }
+
+    @Test
     fun profileParserRejectsExplicitSignedOutStatusEvenWithUserId() {
         val raw = JSONObject(
             """{"message":"success","data":{"has_login":false,"user_info":{"user_id":"42"}}}""",
