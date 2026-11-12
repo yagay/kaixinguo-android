@@ -53,6 +53,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
+import com.kadaliao.kaixinguo.KaixinguoApplication
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -227,6 +229,7 @@ fun HotView() {
 fun MineScreen() {
     val model = LocalModel.current
     val router = LocalRouter.current
+    val follows = (LocalContext.current.applicationContext as KaixinguoApplication).follows
     val watched = model.history.list.take(30)
     val saved = model.favorites.cards
     Page("我的", actions = {
@@ -245,6 +248,34 @@ fun MineScreen() {
                     ) {
                         items(watched, key = { it.seriesID }) { WatchCard(it) }
                     }
+                }
+            }
+            line("local-follows-title") {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    SectionTitle("本机追更")
+                    Text(
+                        if ((follows?.unreadCount ?: 0) > 0)
+                            "有 " + (follows?.unreadCount ?: 0) + " 部更新  ›"
+                        else "管理追更  ›",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable { router.open(Route.LocalFollows) }
+                            .padding(8.dp),
+                    )
+                }
+            }
+            if (follows?.entries?.isEmpty() != false) {
+                line("local-follows-empty") {
+                    Text(
+                        "在剧集详情点击「本机追更」，以后可以手动检查新集数",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
                 }
             }
             line("saved-title") { SectionTitle("收藏") }

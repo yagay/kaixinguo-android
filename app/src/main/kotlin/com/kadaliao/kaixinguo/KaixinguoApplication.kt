@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.compose.runtime.snapshotFlow
 import com.kadaliao.kaixinguo.account.AccountRepository
 import com.kadaliao.kaixinguo.account.PassportRepository
+import com.kadaliao.kaixinguo.account.LocalFollows
 import com.kadaliao.kaixinguo.diagnostics.Diagnostics
 import com.kadaliao.kaixinguo.settings.AppSettings
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -45,6 +46,8 @@ class KaixinguoApplication : Application() {
         private set
     lateinit var passport: PassportRepository
         private set
+    var follows: LocalFollows? = null
+        private set
 
     override fun onCreate() {
         super.onCreate()
@@ -74,6 +77,7 @@ class KaixinguoApplication : Application() {
             val scope = MainScope()
             model = AppModel(SdkCatalog(client), filesDir, cacheDir, scope, video, streams).also { m ->
                 m.artwork = covers::jpeg
+                follows = LocalFollows(m.catalog, m.scope, filesDir)
                 // The app opens where the viewer left it: the tab and pages
                 // now, the player as the first window opens. Where they are
                 // goes to disk as it changes, so the next launch finds it

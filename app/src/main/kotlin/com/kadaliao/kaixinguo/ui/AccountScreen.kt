@@ -58,6 +58,7 @@ fun AccountScreen() {
     val app = context.applicationContext as KaixinguoApplication
     val account = app.account
     val passport = app.passport
+    val follows = app.follows
     val state by account.state.collectAsState()
     val passportState by passport.state.collectAsState()
     val websiteHistory by account.websiteHistory.collectAsState()
@@ -282,6 +283,20 @@ fun AccountScreen() {
                             if (state.websiteSignedIn) "已验证网站登录，会话已加密保存在本机"
                             else "使用红果官网完成登录后可查看登录状态",
                         )
+                    },
+                )
+            }
+            item {
+                ListItem(
+                    headlineContent = { Text("本机追更与更新检查") },
+                    supportingContent = {
+                        Text(
+                            "已追更 " + (follows?.entries?.size ?: 0) + " 部 · 待查看更新 " +
+                                (follows?.unreadCount ?: 0) + " 部；使用匿名剧集数据，不会上传账号。",
+                        )
+                    },
+                    trailingContent = {
+                        TextButton(onClick = { router.open(Route.LocalFollows) }) { Text("查看") }
                     },
                 )
             }

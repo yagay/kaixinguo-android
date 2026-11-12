@@ -21,6 +21,7 @@ sealed interface Route {
     data class Series(val id: String) : Route
     data object Settings : Route
     data object Account : Route
+    data object LocalFollows : Route
 
     /** The route as a session saves it. */
     val saved: String
@@ -28,6 +29,7 @@ sealed interface Route {
             is Series -> "series:$id"
             Settings -> "settings"
             Account -> "account"
+            LocalFollows -> "local_follows"
         }
 
     companion object {
@@ -35,6 +37,7 @@ sealed interface Route {
         fun parse(s: String): Route? {
             if (s == "settings") return Settings
             if (s == "account") return Account
+            if (s == "local_follows") return LocalFollows
             val (kind, arg) = s.split(':', limit = 2).takeIf { it.size == 2 } ?: return null
             return when (kind) {
                 "series" -> if (arg.isNotEmpty()) Series(arg) else null
