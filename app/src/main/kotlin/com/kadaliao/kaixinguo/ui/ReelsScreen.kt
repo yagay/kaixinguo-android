@@ -91,10 +91,10 @@ fun ReelsScreen(inPip: Boolean) {
             retryEmptyOnError = false,
         )
     }
-    LaunchedEffect(accountFeed, accountSession.websiteSignedIn) {
-        if (accountSession.websiteSignedIn && !accountFeed.started) accountFeed.loadMore()
+    LaunchedEffect(accountFeed, accountSession.signedIn) {
+        if (accountSession.signedIn && !accountFeed.started) accountFeed.loadMore()
     }
-    val verifiedAccountSource = accountSession.websiteSignedIn &&
+    val verifiedAccountSource = accountSession.signedIn &&
         accountRecommendation.ready && accountFeed.cards.isNotEmpty()
     val realFeed = remember(model) { discoverFeed(model, Channel.REAL.sdkName) }
     val comicFeed = remember(model) { discoverFeed(model, Channel.COMIC.sdkName) }
@@ -210,7 +210,7 @@ fun ReelsScreen(inPip: Boolean) {
                         scope.launch {
                             Diagnostics.record("reels", "refresh_requested")
                             player.leave()
-                            if (channel == Channel.RECOMMEND && accountSession.websiteSignedIn) {
+                            if (channel == Channel.RECOMMEND && accountSession.signedIn) {
                                 // A fresh account attempt invalidates the previous cursor.
                                 account.retryAccountRecommendations()
                                 model.home.refresh(merging = false)
@@ -226,6 +226,26 @@ fun ReelsScreen(inPip: Boolean) {
                     Icon(Icons.Filled.Refresh, contentDescription = "刷新刷剧列表", tint = Color.White)
                 }
             }
+        }
+        if (!inPip && channel == Channel.RECOMMEND && accountSession.signedIn) {
+            // A small source indicator avoids silently presenting anonymous
+            // results as the official account recommendation feed.
+            val sourceLabel = when {
+                verifiedAccountSource -> "账号推荐"
+                accountRecommendation.blocked -> "普通推荐 · 账号推荐暂不可用"
+                accountRecommendation.phase.name == "CHECKING" -> "正在验证账号推荐"
+                else -> "普通推荐 · 正在加载账号推荐"
+            }
+            Text(
+                text = sourceLabel,
+                modifier = Modifier.align(Alignment.TopStart).statusBarsPadding()
+                    .padding(start = 14.dp, top = 52.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.Black.copy(alpha = 0.46f))
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                color = Color.White.copy(alpha = 0.9f),
+                fontSize = 11.sp,
+            )
         }
     }
 }
