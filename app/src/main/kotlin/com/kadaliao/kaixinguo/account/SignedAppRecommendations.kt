@@ -1,9 +1,11 @@
 package com.kadaliao.kaixinguo.account
 
+import com.hongguo.account.protocol.AccountProtocolException
 import com.hongguo.account.protocol.ProtocolTransport
 import com.hongguo.account.protocol.Signer
 import com.hongguo.account.protocol.VendorConstants
 import com.hongguo.account.protocol.cloudResponse
+import com.kadaliao.kaixinguo.diagnostics.Diagnostics
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
@@ -60,6 +62,8 @@ internal class SignedAppRecommendationHttp(
         for (host in HOSTS) {
             var unsigned = false
             for (attempt in 0..1) {
+                Diagnostics.record("account_recommendations",
+                    if (unsigned) "app_cookie_retry" else "app_signed_request")
                 val request = if (!unsigned) {
                     val params = linkedMapOf<String, String>().apply {
                         putAll(device)
@@ -99,7 +103,14 @@ internal class SignedAppRecommendationHttp(
                         AccountHttpReply(it.code, it.header("X-Tt-Agw-Login"),
                             JSONObject(cloudResponse(it, 16 * 1024 * 1024)))
                     }
-                } catch (e: IOException) {
+                } catch (e: AccountProtocolException) {
+                    val kind = when (e.errorCode) {
+                        401, 403 -> AccountRecommendationException.Kind.EXPIRED
+                        429 -> AccountRecommendationException.Kind.RATE_LIMITED
+                        else -> AccountRecommendationException.Kind.NETWORK
+                    }
+                    throw AccountRecommendationException(kind)
+                } catch (_: IOException) {
                     // No anonymous downgrade on network errors or empty replies.
                     throw AccountRecommendationException(AccountRecommendationException.Kind.NETWORK)
                 } catch (_: Exception) {
@@ -107,12 +118,17 @@ internal class SignedAppRecommendationHttp(
                 }
                 val code = response.body.optInt("code", -1)
                 if (!unsigned && code == 110) {
+                    Diagnostics.record("account_recommendations", "app_signing_rejected_110")
                     unsigned = true
                     continue
                 }
                 if (response.gatewayLogin == "0")
                     throw AccountRecommendationException(AccountRecommendationException.Kind.UNVERIFIED)
-                if (code == 0) return response
+                if (code == 0) {
+                    Diagnostics.record("account_recommendations",
+                        if (unsigned) "app_cookie_page_received" else "app_signed_page_received")
+                    return response
+                }
                 rejection = when (code) {
                     110 -> AccountRecommendationException(AccountRecommendationException.Kind.SIGNATURE_REQUIRED)
                     13, 1003, 401, 403 -> AccountRecommendationException(AccountRecommendationException.Kind.EXPIRED)
