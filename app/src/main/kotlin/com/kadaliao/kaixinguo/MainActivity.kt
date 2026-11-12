@@ -104,6 +104,7 @@ class MainActivity : ComponentActivity() {
         if (!isInPictureInPictureMode && interactive) model.player.leaveApp()
         app.saveSession()
         model.flush() // what was saved last reaches the disk
+        app.follows?.flush() // persist newly added follows before process suspension
     }
 
     override fun onUserLeaveHint() {

@@ -65,12 +65,14 @@ internal fun mergeEpisodeCount(
 internal interface FollowPersistence {
     fun load(): List<FollowEntry>
     fun save(items: List<FollowEntry>)
+    fun flush() {}
 }
 
 internal class JsonFollowPersistence(dir: File) : FollowPersistence {
     private val file = JSONStore(File(dir, "follows-local-v1.json"), FollowEntry::toJson, FollowEntry::fromJson)
     override fun load(): List<FollowEntry> = file.load()
     override fun save(items: List<FollowEntry>) = file.save(items)
+    override fun flush() = file.flush()
 }
 
 class LocalFollows internal constructor(
@@ -94,6 +96,7 @@ class LocalFollows internal constructor(
     private var runId = 0
 
     val unreadCount: Int get() = entries.count { it.hasNewEpisodes }
+    fun flush() = storage.flush()
 
     fun contains(id: String): Boolean {
         entries.size // Compose snapshot read
