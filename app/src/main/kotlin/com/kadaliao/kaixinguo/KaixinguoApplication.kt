@@ -56,9 +56,11 @@ class KaixinguoApplication : Application() {
         Diagnostics.install(this)
         settings = AppSettings(this)
         account = AccountRepository(this)
-        passport = PassportRepository(this) { cookie ->
-            account.signInWithOfficialWebsite(cookie)
-        }
+        passport = PassportRepository(
+            this,
+            onVerifiedCookie = { cookie -> account.signInWithOfficialWebsite(cookie) },
+            onVerifiedAppCredentials = { credentials -> account.signInWithAppPassport(credentials) },
+        )
         Diagnostics.record("lifecycle", "app_created")
         val debug = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         if (debug) debugLogger = { Log.d("kxg", it) }
