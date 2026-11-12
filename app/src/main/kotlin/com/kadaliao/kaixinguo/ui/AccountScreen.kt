@@ -316,51 +316,15 @@ fun AccountScreen() {
             item { HorizontalDivider() }
             item {
                 ListItem(
-                    headlineContent = { Text("官网观看历史（只读·实验性）") },
+                    headlineContent = { Text("观看历史与差异对照") },
                     supportingContent = {
-                        Text(
-                            "独立尝试官网 /api/pc/watch-history 接口；不是红果 App 云端历史。" +
-                                "仅本次登录会话读取，不合并或上传本机观看记录。",
-                        )
+                        Text("分别查看本机历史与官网历史（只读实验性接口），对照缺少的作品。" +
+                            "不会自动覆盖或上传观看记录。")
                     },
                     trailingContent = {
-                        TextButton(
-                            onClick = account::loadWebsiteHistory,
-                            enabled = state.websiteSignedIn && !websiteHistory.loading,
-                        ) { Text("读取") }
-                    },
-                )
-            }
-            if (websiteHistory.loading) {
-                item { CircularProgressIndicator(modifier = Modifier.padding(16.dp)) }
-            }
-            if (websiteHistory.error.isNotBlank()) {
-                item {
-                    Text(
-                        websiteHistory.error, modifier = Modifier.padding(16.dp),
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            }
-            if (websiteHistory.loaded && websiteHistory.records.isEmpty()) {
-                item {
-                    Text(
-                        "官网本次返回空的观看历史。此结果不代表红果 App 账号没有历史。",
-                        modifier = Modifier.padding(16.dp),
-                    )
-                }
-            }
-            items(websiteHistory.records.size) { index ->
-                val record = websiteHistory.records[index]
-                ListItem(
-                    headlineContent = { Text(record.series.title) },
-                    supportingContent = {
-                        Text("第 " + record.episode + " 集 · 官网读取（不修改本机进度）")
-                    },
-                    trailingContent = {
-                        TextButton(
-                            onClick = { router.open(Route.Series(record.series.seriesId)) },
-                        ) { Text("详情") }
+                        TextButton(onClick = { router.open(Route.AccountHistory) }) {
+                            Text("查看")
+                        }
                     },
                 )
             }

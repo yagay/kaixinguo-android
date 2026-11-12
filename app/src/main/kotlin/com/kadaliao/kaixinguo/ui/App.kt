@@ -185,6 +185,7 @@ private fun TabHost(router: Router, inPip: Boolean) {
                     Route.Settings -> SettingsScreen()
                     Route.Account -> AccountScreen()
                     Route.LocalFollows -> LocalFollowsScreen()
+                    Route.AccountHistory -> AccountHistoryScreen()
                 }
             }
         }
