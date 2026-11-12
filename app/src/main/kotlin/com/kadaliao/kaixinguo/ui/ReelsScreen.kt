@@ -96,6 +96,9 @@ fun ReelsScreen(inPip: Boolean) {
     }
     val verifiedAccountSource = accountSession.signedIn &&
         accountRecommendation.ready && accountFeed.cards.isNotEmpty()
+    // Do not briefly play anonymous recommendations while the authenticated
+    // source is being checked; use ordinary recommendations only after failure.
+    val tryingAccountSource = accountSession.signedIn && !accountRecommendation.blocked
     val realFeed = remember(model) { discoverFeed(model, Channel.REAL.sdkName) }
     val comicFeed = remember(model) { discoverFeed(model, Channel.COMIC.sdkName) }
     var channel by rememberSaveable { mutableStateOf(Channel.RECOMMEND) }
@@ -106,7 +109,7 @@ fun ReelsScreen(inPip: Boolean) {
     LaunchedEffect(accountSession.sessionRevision, verifiedAccountSource) { recommendationIndex = 0 }
 
     val feed = when (channel) {
-        Channel.RECOMMEND -> if (verifiedAccountSource) accountFeed else model.home
+        Channel.RECOMMEND -> if (tryingAccountSource) accountFeed else model.home
         Channel.REAL -> realFeed
         Channel.COMIC -> comicFeed
     }
@@ -234,7 +237,7 @@ fun ReelsScreen(inPip: Boolean) {
                 verifiedAccountSource -> "账号推荐"
                 accountRecommendation.blocked -> "普通推荐 · 账号推荐暂不可用"
                 accountRecommendation.phase.name == "CHECKING" -> "正在验证账号推荐"
-                else -> "普通推荐 · 正在加载账号推荐"
+                else -> "正在加载账号推荐"
             }
             Text(
                 text = sourceLabel,
