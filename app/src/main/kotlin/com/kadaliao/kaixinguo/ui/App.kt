@@ -27,11 +27,13 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SmartDisplay
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Leaderboard
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.SmartDisplay
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.Icon
@@ -116,6 +118,7 @@ fun App(model: AppModel, router: Router, covers: CoverStore, video: ExoVideo, in
 }
 
 private fun Tab.icon(on: Boolean): ImageVector = when (this) {
+    Tab.REELS -> if (on) Icons.Filled.SmartDisplay else Icons.Outlined.SmartDisplay
     Tab.DISCOVER -> if (on) Icons.Filled.Home else Icons.Outlined.Home
     Tab.RANK -> if (on) Icons.Filled.Leaderboard else Icons.Outlined.Leaderboard
     Tab.NEW -> if (on) Icons.Filled.CalendarMonth else Icons.Outlined.CalendarMonth
@@ -163,6 +166,7 @@ private fun TabHost(router: Router) {
             Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                 when (val r = e.route) {
                     null -> when (e.tab) {
+                        Tab.REELS -> ReelsScreen()
                         Tab.DISCOVER -> DiscoverScreen()
                         Tab.RANK -> RankScreen()
                         Tab.NEW -> NewReleasesScreen()

@@ -199,7 +199,7 @@ class SessionTest {
         assertNull(s.player)
         val router = Router()
         router.restore(s)
-        assertEquals(Tab.DISCOVER, router.tab)
+        assertEquals(Tab.REELS, router.tab)
         assertEquals(listOf(Route.Series("9")), router.path(Tab.RANK))
         assertTrue(Tab.entries.filter { it != Tab.RANK }.all { router.path(it).isEmpty() })
 

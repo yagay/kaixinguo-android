@@ -8,6 +8,7 @@ import com.kadaliao.kaixinguo.model.Session
 
 /** Tab is one of the app's tabs. */
 enum class Tab(val label: String) {
+    REELS("刷短剧"),
     DISCOVER("推荐"),
     RANK("排行榜"),
     NEW("新剧"),
@@ -39,7 +40,7 @@ sealed interface Route {
 
 /** Router is where the viewer is: the tab, and the pages pushed in each. It belongs to the main thread. */
 class Router {
-    var tab by mutableStateOf(Tab.DISCOVER)
+    var tab by mutableStateOf(Tab.REELS)
         private set
     private val paths = Tab.entries.associateWith { mutableStateListOf<Route>() }
 
@@ -92,14 +93,14 @@ class Router {
         searchQuery = t
     }
 
-    val canGoBack: Boolean get() = paths.getValue(tab).isNotEmpty() || tab != Tab.DISCOVER
+    val canGoBack: Boolean get() = paths.getValue(tab).isNotEmpty() || tab != Tab.REELS
 
     /** Goes back a page, or from another tab's own page to the first tab's. */
     fun back() {
         if (paths.getValue(tab).isNotEmpty()) {
             pop(tab)
         } else if (tab != Tab.DISCOVER) {
-            tab = Tab.DISCOVER
+            tab = Tab.REELS
         }
     }
 
@@ -113,7 +114,7 @@ class Router {
 
     /** Goes back to the tab, pages and search the session saved, skipping what this version doesn't know. */
     fun restore(s: Session) {
-        tab = Tab.entries.firstOrNull { it.name == s.tab } ?: Tab.DISCOVER
+        tab = Tab.entries.firstOrNull { it.name == s.tab } ?: Tab.REELS
         for (t in Tab.entries) {
             val p = paths.getValue(t)
             p.clear()

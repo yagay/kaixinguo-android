@@ -153,6 +153,7 @@ class MainActivity : ComponentActivity() {
         if (model.player.isPresented) model.player.leave()
         when (uri.host) {
             "series" -> if (id != null) router.open(Route.Series(id))
+            "reels" -> router.select(Tab.REELS)
             "discover" -> router.select(Tab.DISCOVER)
             "rank" -> router.select(Tab.RANK)
             "new" -> router.select(Tab.NEW)
