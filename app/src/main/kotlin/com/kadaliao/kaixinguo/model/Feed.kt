@@ -17,6 +17,15 @@ class Feed(
     private val fetch: (suspend (cursor: String) -> FeedPage)?,
     private val retryEmptyOnError: Boolean = true,
 ) {
+    // Preserve the original Feed(scope) { suspend page } call sites:
+    // adding a Boolean as the last primary-constructor parameter otherwise
+    // prevents Kotlin's trailing-lambda syntax from resolving to fetch.
+    constructor(
+        scope: CoroutineScope,
+        retryEmptyOnError: Boolean = true,
+        fetch: suspend (cursor: String) -> FeedPage,
+    ) : this(scope, fetch, retryEmptyOnError)
+
     var cards by mutableStateOf(emptyList<Card>())
         private set
     private var seen = HashSet<String>()
