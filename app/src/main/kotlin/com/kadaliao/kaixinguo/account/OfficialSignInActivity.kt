@@ -12,6 +12,7 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.WebStorage
 import android.webkit.WebSettings
 import android.widget.Button
 import android.widget.LinearLayout
@@ -126,6 +127,7 @@ class OfficialSignInActivity : ComponentActivity() {
         // The isolated browser profile is cleared on every exit.
         CookieManager.getInstance().removeAllCookies(null)
         CookieManager.getInstance().flush()
+        WebStorage.getInstance().deleteAllData()
         browser?.apply {
             stopLoading()
             loadUrl("about:blank")
@@ -140,6 +142,7 @@ class OfficialSignInActivity : ComponentActivity() {
     override fun onDestroy() {
         if (!closing) {
             CookieManager.getInstance().removeAllCookies(null)
+            WebStorage.getInstance().deleteAllData()
             browser?.destroy()
             browser = null
         }

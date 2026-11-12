@@ -27,10 +27,25 @@ object Diagnostics {
         Thread(task, "kxg-diagnostics").apply { isDaemon = true }
     }
     private var journal: File? = null
+    private val fileLock = Any()
+    private var crashHandlerInstalled = false
 
     @Synchronized
     fun install(context: Context) {
         journal = File(context.noBackupFilesDir, "kxg-diagnostics-events.log")
+        if (crashHandlerInstalled) return
+        crashHandlerInstalled = true
+        val earlier = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, failure ->
+            // Never persist Throwable.message: upstream errors may contain secrets.
+            val header = Instant.now().toString() + " [crash] " +
+                failure.javaClass.name + "\n"
+            val frames = failure.stackTrace.take(45).joinToString("\n") { "  at " + it.toString() }
+            synchronized(fileLock) {
+                runCatching { journal?.appendText(header + frames + "\n") }
+            }
+            earlier?.uncaughtException(thread, failure)
+        }
     }
 
     @Synchronized
@@ -41,12 +56,14 @@ object Diagnostics {
         entries.addLast(entry)
         val path = journal
         if (path != null) writer.execute {
-            runCatching {
-                if (path.length() > 160 * 1024) {
-                    val last = path.readText().takeLast(64 * 1024).substringAfter('\n', "")
-                    path.writeText(last)
+            synchronized(fileLock) {
+                runCatching {
+                    if (path.length() > 160 * 1024) {
+                        val last = path.readText().takeLast(64 * 1024).substringAfter('\n', "")
+                        path.writeText(last)
+                    }
+                    path.appendText(entry.at + " [" + entry.area + "] " + entry.action + "\n")
                 }
-                path.appendText(entry.at + " [" + entry.area + "] " + entry.action + "\n")
             }
         }
     }
@@ -55,7 +72,9 @@ object Diagnostics {
     fun clear() {
         entries.clear()
         val path = journal
-        if (path != null) writer.execute { runCatching { path.delete() } }
+        if (path != null) writer.execute {
+            synchronized(fileLock) { runCatching { path.delete() } }
+        }
         record("diagnostics", "cleared")
     }
 
@@ -110,8 +129,10 @@ object Diagnostics {
         includeProcessLogcat: Boolean,
     ) {
         val logcat = if (includeProcessLogcat) ownProcessLogcat() else ""
-        val previous = runCatching { journal?.takeIf { it.exists() }?.readText().orEmpty() }
-            .getOrDefault("")
+        val previous = synchronized(fileLock) {
+            runCatching { journal?.takeIf { it.exists() }?.readText().orEmpty() }
+                .getOrDefault("")
+        }
         val writer = context.contentResolver.openOutputStream(uri, "wt")
             ?: throw IllegalStateException("Unable to write diagnostic document")
         writer.bufferedWriter(Charsets.UTF_8).use {

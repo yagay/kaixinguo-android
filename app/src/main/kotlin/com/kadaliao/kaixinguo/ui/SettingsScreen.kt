@@ -2,6 +2,7 @@ package com.kadaliao.kaixinguo.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -25,6 +26,8 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
@@ -46,6 +49,7 @@ fun SettingsScreen() {
     val settings = app.settings
     val router = LocalRouter.current
     val account = app.account
+    val accountState by account.state.collectAsState()
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     val createReport = rememberLauncherForActivityResult(
@@ -83,7 +87,7 @@ fun SettingsScreen() {
                     headlineContent = { Text("账号与同步") },
                     supportingContent = {
                         Text(
-                            if (account.state.value.websiteSignedIn) "官网已登录 · 云端数据待接入"
+                            if (accountState.websiteSignedIn) "官网已登录 · 云端数据待接入"
                             else "官网登录、登录态管理与云端功能状态",
                         )
                     },
@@ -92,7 +96,7 @@ fun SettingsScreen() {
                             Icons.Outlined.ManageAccounts, contentDescription = null,
                         )
                     },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().clickable { router.open(Route.Account) },
                     trailingContent = {
                         TextButton(onClick = { router.open(Route.Account) }) { Text("进入") }
                     },

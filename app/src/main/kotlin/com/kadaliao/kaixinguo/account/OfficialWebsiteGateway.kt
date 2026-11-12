@@ -69,6 +69,8 @@ internal class OfficialWebsiteGateway : WebsiteAccountGateway {
             val userId = sequenceOf(
                 user.optString("user_id"), user.optString("uid"), user.optString("id"),
             ).firstOrNull { it.isNotBlank() && it != "0" }.orEmpty()
+            // Explicit negative status overrides public user information.
+            if (loginFlag != null && !loggedIn) throw WebsiteAuthException()
             if (!loggedIn && userId.isBlank()) throw WebsiteAuthException()
             val nickname = sequenceOf(
                 user.optString("nickname"), user.optString("name"),
