@@ -118,6 +118,7 @@ fun AccountScreen() {
                         Text(
                             when (state.phase) {
                                 AccountPhase.WEBSITE_SIGNED_IN -> state.profile?.nickname ?: "官网用户"
+                                AccountPhase.APP_SIGNED_IN -> state.profile?.nickname ?: "红果 App 用户"
                                 AccountPhase.VERIFYING -> "正在验证官网账号"
                                 AccountPhase.RESTORING -> "正在恢复登录态"
                                 AccountPhase.EXPIRED -> "官网登录状态已失效"
@@ -130,15 +131,15 @@ fun AccountScreen() {
                     supportingContent = {
                         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             if (state.message.isNotBlank()) Text(state.message)
-                            if (state.websiteSignedIn) {
-                                Text("注意：网站账号认证不等于红果 App 的云端账号已连接。")
+                            if (state.signedIn) {
+                                if (!state.appSignedIn) Text("注意：网站账号认证不等于红果 App 的云端账号已连接。")
                                 if (state.verifiedAtEpochMs > 0) {
                                     val checkedAt = remember(state.verifiedAtEpochMs) {
                                         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
                                             .withZone(ZoneId.systemDefault())
                                             .format(Instant.ofEpochMilli(state.verifiedAtEpochMs))
                                     }
-                                    Text("官网核验时间：" + checkedAt)
+                                    Text((if (state.appSignedIn) "App 账号核验时间：" else "官网核验时间：") + checkedAt)
                                 }
                             }
                         }
@@ -285,7 +286,7 @@ fun AccountScreen() {
                                 state.phase != AccountPhase.VERIFYING,
                         ) { Text("重新验证保存的登录态") }
                     }
-                    if (state.hasSavedSession || state.websiteSignedIn) {
+                    if (state.hasSavedSession || state.signedIn) {
                         TextButton(
                             modifier = Modifier.fillMaxWidth(),
                             onClick = { askSignOut = true },
@@ -320,7 +321,8 @@ fun AccountScreen() {
                     headlineContent = { Text("官网账号资料") },
                     supportingContent = {
                         Text(
-                            if (state.websiteSignedIn) "已验证网站登录，会话已加密保存在本机"
+                            if (state.appSignedIn) "已验证红果 App 账号，登录态已加密保存在本机"
+                            else if (state.websiteSignedIn) "已验证网站登录，会话已加密保存在本机"
                             else "使用红果官网完成登录后可查看登录状态",
                         )
                     },
@@ -346,7 +348,8 @@ fun AccountScreen() {
                     supportingContent = {
                         Text(
                             when {
-                                !state.websiteSignedIn -> "当前未登录官网，刷剧使用普通推荐"
+                                !state.signedIn -> "当前未登录账号，刷剧使用普通推荐"
+                                state.appSignedIn -> "已验证 App 业务账号；账号推荐接口将独立验证，未验证前使用普通推荐"
                                 recommendation.ready -> "已获取网关验证的账号推荐。刷剧的「推荐」自动使用独立账号列表。"
                                 recommendation.message.isNotBlank() ->
                                     recommendation.message + "；仍显示普通推荐，不冒充账号结果。"
@@ -395,7 +398,7 @@ fun AccountScreen() {
             }
             item {
                 Text(
-                    "支持网页内人工登录、扫码和官网验证码登录；密码与验证码不会保存到应用账号存储。" +
+                    "支持网页内人工登录、扫码和 App 短信验证码登录；密码与验证码不会保存到应用账号存储。" +
                         "若平台要求滑块等验证，请直接在官方网页内完成。",
                     modifier = Modifier.padding(16.dp),
                     style = MaterialTheme.typography.bodySmall,
