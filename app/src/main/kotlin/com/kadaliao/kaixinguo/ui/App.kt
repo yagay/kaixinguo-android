@@ -106,7 +106,7 @@ fun App(model: AppModel, router: Router, covers: CoverStore, video: ExoVideo, in
                 Box(clear) { TabHost(router, inPip) }
             }
             AnimatedVisibility(
-                visible = player.isPresented && (!router.reelsActive || inPip),
+                visible = player.isPresented && (inPip || router.tab != Tab.DISCOVER || router.top != null || !router.reelsActive),
                 enter = slideInVertically(tween(280)) { it },
                 exit = slideOutVertically(tween(240)) { it },
             ) {

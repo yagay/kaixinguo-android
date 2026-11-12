@@ -44,7 +44,7 @@ class Router {
         private set
 
     /** UI-only: the homepage is displaying the original ExoPlayer surface inline. */
-    var reelsActive by mutableStateOf(false)
+    var reelsActive by mutableStateOf(true)
     private val paths = Tab.entries.associateWith { mutableStateListOf<Route>() }
 
     /** What the search field holds, and the search whose results show. */
