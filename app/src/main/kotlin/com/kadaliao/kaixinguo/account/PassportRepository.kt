@@ -155,7 +155,7 @@ class PassportRepository(
         Diagnostics.record("passport", "sms_app_requested")
         scope.launch {
             try {
-                val receipt = withContext(Dispatchers.IO) { auth.sendSms(number) }
+                val receipt = withContext(Dispatchers.IO) { auth.send(number) }
                 if (generation != token) return@launch
                 val retryAt = System.currentTimeMillis() +
                     receipt.retrySeconds.coerceIn(30, 3600) * 1000L
