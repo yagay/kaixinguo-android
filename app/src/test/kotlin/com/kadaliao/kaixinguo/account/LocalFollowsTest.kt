@@ -5,8 +5,59 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.kadaliao.kaixinguo.model.FakeCatalog
+import com.kadaliao.kaixinguo.model.playable
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
 
 class LocalFollowsTest {
+    private class MemoryStore : FollowPersistence {
+        var data = emptyList<FollowEntry>()
+        override fun load() = data
+        override fun save(items: List<FollowEntry>) { data = items.toList() }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun aRealCheckChangesEpisodeCountWithoutACloudAccount() = runTest {
+        val catalog = FakeCatalog()
+        catalog.playable("111", 15)
+        val saved = MemoryStore()
+        val follows = LocalFollows(catalog, this, saved)
+        follows.follow("111", "作品", "", 12)
+        follows.checkUpdates()
+        advanceUntilIdle()
+        assertEquals(1, follows.unreadCount)
+        assertEquals(15, follows.entries.single().latestEpisodes)
+        follows.markRead("111")
+        assertEquals(0, follows.unreadCount)
+        assertEquals(15, saved.data.single().seenEpisodes)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun failingRequestsDoNotRemoveLocalFollows() = runTest {
+        val catalog = FakeCatalog()
+        val store = MemoryStore()
+        val follows = LocalFollows(catalog, this, store)
+        follows.follow("999", "原有记录", "", 8)
+        follows.checkUpdates()
+        advanceUntilIdle()
+        assertEquals(1, follows.failedCount)
+        assertEquals("原有记录", follows.entries.single().title)
+        assertEquals(8, follows.entries.single().latestEpisodes)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun duplicateFollowToggleAndRemovalArePersisted() = runTest {
+        val store = MemoryStore()
+        val follows = LocalFollows(FakeCatalog(), this, store)
+        follows.follow("100", "作品", "", 1)
+        follows.follow("100", "重复", "", 2)
+        assertEquals(1, follows.entries.size)
+        follows.toggle("100", "作品", "", 1)
+        assertTrue(store.data.isEmpty())
+    }
+
     @Test fun firstCheckWithoutInitialMetadataDoesNotInventAnUpdate() {
         val original = FollowEntry("123", "A", latestEpisodes = 0, seenEpisodes = 0)
         val checked = mergeEpisodeCount(original, 45, 100)
