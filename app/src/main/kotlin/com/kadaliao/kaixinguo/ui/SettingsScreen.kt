@@ -67,7 +67,7 @@ fun SettingsScreen() {
                 snackbar.showSnackbar(
                     if (result.isSuccess) "诊断日志已导出" else "导出失败，请检查文件保存位置",
                 )
-                settings.setIncludeProcessLogcat(false)
+                settings.updateIncludeProcessLogcat(false)
             }
         }
     }
@@ -111,7 +111,7 @@ fun SettingsScreen() {
                     trailingContent = {
                         Switch(
                             checked = settings.resumeOnLaunch,
-                            onCheckedChange = settings::setResumeOnLaunch,
+                            onCheckedChange = settings::updateResumeOnLaunch,
                         )
                     },
                 )
@@ -123,7 +123,7 @@ fun SettingsScreen() {
                     trailingContent = {
                         Switch(
                             checked = settings.automaticPictureInPicture,
-                            onCheckedChange = settings::setAutomaticPictureInPicture,
+                            onCheckedChange = settings::updateAutomaticPictureInPicture,
                         )
                     },
                 )
@@ -165,7 +165,7 @@ fun SettingsScreen() {
                     trailingContent = {
                         Switch(
                             checked = settings.includeProcessLogcat,
-                            onCheckedChange = settings::setIncludeProcessLogcat,
+                            onCheckedChange = settings::updateIncludeProcessLogcat,
                         )
                     },
                 )

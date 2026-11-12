@@ -17,20 +17,20 @@ class AppSettings(context: Context) {
     var includeProcessLogcat by mutableStateOf(false)
         private set
 
-    fun setResumeOnLaunch(value: Boolean) {
+    fun updateResumeOnLaunch(value: Boolean) {
         prefs.edit().putBoolean("resume_on_launch", value).apply()
         resumeOnLaunch = value
         Diagnostics.record("settings", "resume_on_launch_changed")
     }
 
-    fun setAutomaticPictureInPicture(value: Boolean) {
+    fun updateAutomaticPictureInPicture(value: Boolean) {
         prefs.edit().putBoolean("automatic_pip", value).apply()
         automaticPictureInPicture = value
         Diagnostics.record("settings", "automatic_pip_changed")
     }
 
     /** Intentionally not persisted: every potentially sensitive logcat export needs fresh consent. */
-    fun setIncludeProcessLogcat(value: Boolean) {
+    fun updateIncludeProcessLogcat(value: Boolean) {
         includeProcessLogcat = value
     }
 }
