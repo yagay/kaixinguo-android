@@ -130,6 +130,8 @@ fun ReelsScreen(inPip: Boolean) {
         }
 
         if (!inPip) {
+            // Reuse the existing accurate playback clock and seek bar.
+            ProgressBar(Modifier.align(Alignment.BottomCenter))
             Box(
                 Modifier.fillMaxWidth().height(100.dp).align(Alignment.TopCenter)
                     .background(
@@ -238,7 +240,7 @@ private fun FeedPages(
                 when {
                     feed.error != null -> friendly(feed.error)
                     feed.loading || !feed.started -> "正在加载短剧…"
-                    else -> "暂时没有可刷的短剧",
+                    else -> "暂时没有可刷的短剧"
                 },
                 color = Color.White,
             )

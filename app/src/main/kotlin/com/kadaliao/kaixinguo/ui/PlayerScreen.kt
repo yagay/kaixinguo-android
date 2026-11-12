@@ -788,7 +788,7 @@ private fun clock(s: Double): String {
 
 /** ProgressBar is how far the episode has got, along the bottom of the video; dragging along it moves there. */
 @Composable
-private fun ProgressBar(modifier: Modifier) {
+internal fun ProgressBar(modifier: Modifier) {
     val video = LocalModel.current.player.video
     var dragged by remember { mutableStateOf<Float?>(null) } // where a drag is, as a fraction
     var at by remember { mutableDoubleStateOf(0.0) }
