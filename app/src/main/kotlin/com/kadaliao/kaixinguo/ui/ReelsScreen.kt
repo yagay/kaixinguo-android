@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,7 +36,12 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.kadaliao.kaixinguo.model.PlayerState
+import com.kadaliao.kaixinguo.model.Card
+import com.kadaliao.kaixinguo.model.Feed
+import com.kadaliao.kaixinguo.model.FeedPage
+import dev.openhongguo.ShortRankQuery
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 
@@ -47,29 +54,56 @@ import androidx.compose.runtime.rememberCoroutineScope
 fun ReelsScreen() {
     val model = LocalModel.current
     val router = LocalRouter.current
-    val feed = model.home
     val player = model.player
     val scope = rememberCoroutineScope()
-    var index by rememberSaveable { mutableIntStateOf(0) }
+    // Display-only categories: reuse existing Catalog + Feed and keep all player internals intact.
+    val humanFeed = remember(model) {
+        Feed(model.scope) { cursor ->
+            val result = model.catalog.shortRank(ShortRankQuery(content = "human", cursor = cursor))
+            FeedPage(cursor = result.cursor, more = result.hasMore).apply {
+                cards = result.items.filter { it.seriesId.isNotEmpty() }.map { item ->
+                    Card(
+                        id = item.seriesId,
+                        title = item.title,
+                        cover = item.coverUrl,
+                        sub = item.score.ifEmpty {
+                            if (item.episodeCount > 0) "全${item.episodeCount}集" else ""
+                        },
+                        episodes = item.episodeCount,
+                    )
+                }
+            }
+        }
+    }
+    var channel by rememberSaveable { mutableStateOf("推荐") }
+    var recommendIndex by rememberSaveable { mutableIntStateOf(0) }
+    var humanIndex by rememberSaveable { mutableIntStateOf(0) }
+    val human = channel == "真人"
+    val feed = if (human) humanFeed else model.home
+    val index = if (human) humanIndex else recommendIndex
+    fun selectIndex(value: Int) {
+        if (human) humanIndex = value else recommendIndex = value
+    }
     var drag by remember { mutableFloatStateOf(0f) }
     val threshold = with(LocalDensity.current) { 72.dp.toPx() }
     val cards = feed.cards
     val card = cards.getOrNull(index)
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(feed) {
         if (feed.wantsMore && !feed.loading) feed.loadMore()
     }
-    LaunchedEffect(cards.size) {
-        if (cards.isEmpty()) index = 0
-        else if (index > cards.lastIndex) index = cards.lastIndex
+    LaunchedEffect(feed, cards.size) {
+        if (cards.isEmpty()) selectIndex(0)
+        else if (index > cards.lastIndex) selectIndex(cards.lastIndex)
     }
-    LaunchedEffect(index, cards.size) {
+    LaunchedEffect(feed, index, cards.size) {
         if (cards.isNotEmpty() && index >= cards.size - 3 && feed.wantsMore && !feed.loading) {
             feed.loadMore()
         }
     }
-    LaunchedEffect(card?.id) {
-        card?.let { model.playSeason(it.id) }
+    LaunchedEffect(channel, card?.id) {
+        // Switching categories must not leave the previous category playing behind an empty feed.
+        if (card == null) player.leave() else model.playSeason(card.id)
     }
     DisposableEffect(router) {
         router.reelPlaybackActive = true
@@ -91,15 +125,14 @@ fun ReelsScreen() {
                     CircularProgressIndicator(color = Color.White)
                 }
                 Text(
-                    if (feed.error != null) "推荐加载失败" else if (feed.loading || !feed.started) "正在加载短剧…"
-                    else "暂无推荐短剧",
+                    if (feed.error != null) "短剧加载失败" else if (feed.loading || !feed.started) "正在加载短剧…"
+                    else "暂无短剧",
                     color = Color.White,
                     modifier = Modifier.padding(16.dp),
                 )
                 if (feed.error != null) Button(onClick = feed::retry) { Text("重试") }
             }
-            return@Box
-        }
+        } else {
 
         // Reuse Kaixinguo's single ExoPlayer. No changes to Player, Video or MediaSession.
         VideoSurface(Modifier.fillMaxSize())
@@ -127,7 +160,7 @@ fun ReelsScreen() {
                             if (direction > 0 && index >= cards.lastIndex) {
                                 if (feed.wantsMore) feed.loadMore()
                             } else if (direction != 0) {
-                                index = (index + direction).coerceIn(0, cards.lastIndex)
+                                selectIndex((index + direction).coerceIn(0, cards.lastIndex))
                             }
                             drag = 0f
                         },
@@ -138,21 +171,6 @@ fun ReelsScreen() {
                     if (router.reelPlaybackActive && player.isPresented) player.togglePause()
                 },
         )
-
-        Row(
-            Modifier.align(Alignment.TopCenter).fillMaxWidth()
-                .statusBarsPadding().padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("刷短剧", color = Color.White, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.weight(1f))
-            TextButton(onClick = {
-                scope.launch {
-                    feed.refresh(merging = false)
-                    index = 0
-                }
-            }) { Text("刷新推荐", color = Color.White) }
-        }
 
         if (current && (player.state == PlayerState.Resolving || player.state == PlayerState.Buffering)) {
             CircularProgressIndicator(Modifier.align(Alignment.Center), color = Color.White)
@@ -192,5 +210,52 @@ fun ReelsScreen() {
                 )
             }
         }
+        } // end current video card
+
+        // Centered category tabs remain available even when one feed is empty or loading.
+        Row(
+            Modifier.align(Alignment.TopCenter).fillMaxWidth()
+                .statusBarsPadding()
+                .background(Color.Black.copy(alpha = 0.22f))
+                .padding(horizontal = 12.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("刷短剧", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.weight(1f))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(24.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                listOf("推荐", "真人").forEach { label ->
+                    val selected = channel == label
+                    Column(
+                        Modifier.clickable { channel = label }.padding(vertical = 7.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            label,
+                            color = if (selected) Color.White else Color.White.copy(alpha = 0.66f),
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                            fontSize = if (selected) 17.sp else 15.sp,
+                        )
+                        Box(
+                            Modifier.padding(top = 5.dp).width(20.dp).height(3.dp)
+                                .background(
+                                    if (selected) Color.White else Color.Transparent,
+                                    RoundedCornerShape(2.dp),
+                                ),
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = {
+                scope.launch {
+                    feed.refresh(merging = false)
+                    selectIndex(0)
+                }
+            }) { Text("刷新", color = Color.White, fontSize = 13.sp) }
+        }
+
     }
 }
