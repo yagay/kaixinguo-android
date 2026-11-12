@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.net.http.SslError
 import android.os.Bundle
+import android.view.WindowManager
 import android.webkit.CookieManager
 import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
@@ -18,6 +19,9 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 
 /**
  * An isolated :account_login process. The user interacts with the real
@@ -31,10 +35,25 @@ class OfficialSignInActivity : ComponentActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The login window uses the same theme as the immersive player, but
+        // its native buttons and WebView must stay clear of the system bars.
+        // Always manage insets here (including Android 15/16 enforced edge-to-edge).
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         // Must precede CookieManager and WebView construction in this process.
         WebView.setDataDirectorySuffix("kxg-official-account")
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
+            )
+            val keyboard = insets.getInsets(WindowInsetsCompat.Type.ime())
+            // The first button row must never sit underneath the status bar
+            // or display cutout; the WebView must also clear the keyboard.
+            view.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, keyboard.bottom))
+            insets
         }
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -100,6 +119,7 @@ class OfficialSignInActivity : ComponentActivity() {
         }
         root.addView(web, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(root)
+        ViewCompat.requestApplyInsets(root)
     }
 
     private fun finishWithOfficialCookie() {
