@@ -14,6 +14,8 @@ class AppSettings(context: Context) {
         private set
     var automaticPictureInPicture by mutableStateOf(prefs.getBoolean("automatic_pip", true))
         private set
+    var preferAccountRecommendations by mutableStateOf(prefs.getBoolean("prefer_account_recommendations", true))
+        private set
     var includeProcessLogcat by mutableStateOf(false)
         private set
 
@@ -27,6 +29,12 @@ class AppSettings(context: Context) {
         prefs.edit().putBoolean("automatic_pip", value).apply()
         automaticPictureInPicture = value
         Diagnostics.record("settings", "automatic_pip_changed")
+    }
+
+    fun updatePreferAccountRecommendations(value: Boolean) {
+        prefs.edit().putBoolean("prefer_account_recommendations", value).apply()
+        preferAccountRecommendations = value
+        Diagnostics.record("settings", if (value) "account_recommendations_enabled" else "account_recommendations_disabled")
     }
 
     /** Intentionally not persisted: every potentially sensitive logcat export needs fresh consent. */
