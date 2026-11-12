@@ -1,0 +1,41 @@
+package com.kadaliao.kaixinguo.account
+
+/** Website authentication is not the same as a verified Hongguo app business session. */
+enum class AccountPhase {
+    SIGNED_OUT, RESTORING, VERIFYING, WEBSITE_SIGNED_IN, UNAVAILABLE, EXPIRED,
+}
+
+data class WebsiteProfile(val nickname: String, val websiteUserId: String = "")
+
+data class AccountUiState(
+    val phase: AccountPhase = AccountPhase.SIGNED_OUT,
+    val profile: WebsiteProfile? = null,
+    val hasSavedSession: Boolean = false,
+    val message: String = "",
+) {
+    val websiteSignedIn: Boolean get() = phase == AccountPhase.WEBSITE_SIGNED_IN
+}
+
+/** Redacted on purpose. Never include login credentials in exceptions or diagnostics. */
+internal class StoredWebsiteSession(
+    val cookie: String,
+    val nickname: String,
+    val websiteUserId: String,
+    val verifiedAtEpochMs: Long,
+) {
+    override fun toString(): String = "StoredWebsiteSession([redacted])"
+}
+
+/**
+ * Future integration boundary. The anonymous openhongguo SDK cannot implement
+ * these operations, so no UI claims that account cloud data is connected.
+ */
+interface CloudAccountPort {
+    suspend fun accountHistory(): List<CloudWatch>
+    suspend fun accountFavorites(): List<CloudSeries>
+    suspend fun accountLikes(): List<CloudSeries>
+    suspend fun updateProgress(seriesId: String, episode: Int, positionMs: Long): Boolean
+}
+
+data class CloudSeries(val seriesId: String, val title: String, val cover: String)
+data class CloudWatch(val series: CloudSeries, val episode: Int, val positionMs: Long)
