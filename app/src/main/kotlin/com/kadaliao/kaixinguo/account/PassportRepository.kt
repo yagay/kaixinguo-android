@@ -182,6 +182,7 @@ class PassportRepository(
                     message = safeMessage(e),
                 )
                 Diagnostics.record("passport", "sms_code_rejected")
+                Diagnostics.record("passport", passportErrorClass(e))
             } catch (e: Exception) {
                 if (generation == token) failureState("sms_verify_failed", e)
             }
@@ -203,11 +204,18 @@ class PassportRepository(
             message = safeMessage(error),
         )
         Diagnostics.record("passport", event)
+        Diagnostics.record("passport", passportErrorClass(error))
     }
 
     private fun safeMessage(error: Exception): String = when (error) {
         is PassportException -> error.message.orEmpty()
+        is PassportHttpException -> when (error.status) {
+            401, 403 -> "官网拒绝本次短信登录请求（HTTP ${error.status}）。可通过页面上方的「打开红果官网登录」完成平台验证"
+            429 -> "短信登录请求频繁（HTTP 429），请等待倒计时后再试"
+            in 500..599 -> "官网短信服务暂不可用（HTTP ${error.status}），请稍后再试"
+            else -> "官网短信接口返回 HTTP ${error.status}，可尝试网页内登录"
+        }
         is IllegalArgumentException -> error.message.orEmpty().take(120)
-        else -> "认证服务暂不可用，请稍后重试；如需人工验证可使用网页内登录"
+        else -> "官网短信请求未完成，请检查网络；也可以使用页面上方的官网登录"
     }
 }
