@@ -105,15 +105,19 @@ fun App(model: AppModel, router: Router, covers: CoverStore, video: ExoVideo, in
                 }
                 Box(clear) { TabHost(router) }
             }
+            // When the system enters PiP, show only the video above the tab bar.
+            if (inPip && router.reelPlaybackActive) {
+                VideoSurface(Modifier.fillMaxSize())
+            }
             AnimatedVisibility(
-                visible = player.isPresented,
+                visible = player.isPresented && !router.reelPlaybackActive,
                 enter = slideInVertically(tween(280)) { it },
                 exit = slideOutVertically(tween(240)) { it },
             ) {
                 PlayerScreen(inPip)
             }
         }
-        BackHandler(enabled = !player.isPresented && router.canGoBack) { router.back() }
+        BackHandler(enabled = (!player.isPresented || router.reelPlaybackActive) && router.canGoBack) { router.back() }
     }
 }
 

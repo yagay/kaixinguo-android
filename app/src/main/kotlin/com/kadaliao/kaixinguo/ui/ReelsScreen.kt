@@ -69,10 +69,15 @@ fun ReelsScreen() {
         }
     }
     LaunchedEffect(card?.id) {
-        card?.let { model.playReelSeries(it.id) }
+        card?.let { model.playSeason(it.id) }
     }
-    DisposableEffect(Unit) {
-        onDispose { player.stopReel() }
+    DisposableEffect(router) {
+        router.reelPlaybackActive = true
+        onDispose {
+            // Keep the upstream Player behavior: leaving its screen pauses playback.
+            player.leave()
+            router.reelPlaybackActive = false
+        }
     }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
@@ -96,9 +101,9 @@ fun ReelsScreen() {
             return@Box
         }
 
-        // Keep one PlayerView attached; changing the series only replaces its MediaItem.
+        // Reuse Kaixinguo's single ExoPlayer. No changes to Player, Video or MediaSession.
         VideoSurface(Modifier.fillMaxSize())
-        val current = player.reelMode && player.seriesID == card.id
+        val current = router.reelPlaybackActive && player.isPresented
         if (!current || player.state != PlayerState.Playing) {
             CoverImage(card.cover, Modifier.fillMaxSize())
         }
@@ -130,7 +135,7 @@ fun ReelsScreen() {
                     )
                 }
                 .clickable {
-                    if (player.reelMode && player.seriesID == card.id) player.togglePause()
+                    if (router.reelPlaybackActive && player.isPresented) player.togglePause()
                 },
         )
 
@@ -176,7 +181,8 @@ fun ReelsScreen() {
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = {
-                    player.stopReel()
+                    player.leave()
+                    router.reelPlaybackActive = false
                     router.open(Route.Series(card.id))
                 }) { Text("剧集详情 / 选集", color = Color.White) }
                 Spacer(Modifier.weight(1f))

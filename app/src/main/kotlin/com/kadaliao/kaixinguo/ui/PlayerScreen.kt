@@ -398,7 +398,7 @@ private fun VideoArea(hud: PlayerHud, edge: Boolean, chrome: Boolean, rotation: 
 
 /** VideoSurface shows the video, fitted to its frame, black around it. */
 @Composable
-internal fun VideoSurface(modifier: Modifier) {
+private fun VideoSurface(modifier: Modifier) {
     val video = LocalVideo.current
     AndroidView(
         factory = { ctx ->

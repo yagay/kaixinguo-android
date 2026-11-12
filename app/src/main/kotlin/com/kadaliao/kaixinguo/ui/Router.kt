@@ -42,6 +42,9 @@ sealed interface Route {
 class Router {
     var tab by mutableStateOf(Tab.REELS)
         private set
+
+    /** UI-only: the reels tab draws the existing player surface instead of the old player overlay. */
+    var reelPlaybackActive by mutableStateOf(false)
     private val paths = Tab.entries.associateWith { mutableStateListOf<Route>() }
 
     /** What the search field holds, and the search whose results show. */
@@ -99,7 +102,7 @@ class Router {
     fun back() {
         if (paths.getValue(tab).isNotEmpty()) {
             pop(tab)
-        } else if (tab != Tab.DISCOVER) {
+        } else if (tab != Tab.REELS) {
             tab = Tab.REELS
         }
     }

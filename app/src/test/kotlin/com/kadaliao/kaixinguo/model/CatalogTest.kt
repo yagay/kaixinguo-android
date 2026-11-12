@@ -304,32 +304,6 @@ class CatalogTest {
         assertFalse(player.isPresented)
     }
 
-    /** A reel stays inside its tab when it starts, advances, retries, and leaves. */
-    @Test
-    fun reelsUseTheSharedPlayerWithoutOpeningTheFullScreenOverlay() = runTest {
-        val catalog = FakeCatalog()
-        val model = testModel(backgroundScope, catalog)
-        catalog.series["1"] = Series(id = "1", title = "短剧", episodeCount = 3, platform = PlatformType.OUTER)
-        catalog.episodes["1"] = episodes("1", 3)
-        val player = model.player
-
-        player.playReel("1", 1)
-        assertTrue(player.reelMode)
-        assertFalse(player.isPresented)
-        runCurrent()
-        player.ended()
-        assertEquals(2, player.number)
-        assertTrue(player.reelMode)
-        assertFalse(player.isPresented)
-
-        player.retry()
-        assertTrue(player.reelMode)
-        assertFalse(player.isPresented)
-        player.stopReel()
-        assertFalse(player.reelMode)
-        assertFalse(player.isPresented)
-    }
-
     /**
      * Holding the video plays it at double speed until the finger lifts; a
      * swipe down locks it on, and a later hold that swipes up goes back to the

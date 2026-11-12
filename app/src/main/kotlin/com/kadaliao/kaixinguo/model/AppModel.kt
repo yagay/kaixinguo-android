@@ -385,22 +385,6 @@ class AppModel(
         player.play(id, 1)
     }
 
-    /** Same resume rules as the regular player, but show playback inside the reels tab. */
-    fun playReelSeries(id: String) {
-        val sp = series[id]
-        if (sp?.series != null) {
-            val point = resumePoint(sp)
-            player.playReel(point.seriesID, point.number, point.start)
-            return
-        }
-        val last = history.get(id)
-        if (last != null && !last.finished) {
-            player.playReel(id, last.episode.coerceAtLeast(1), maxOf(0.0, last.position - 3))
-        } else {
-            player.playReel(id, 1)
-        }
-    }
-
     /** Plays the series from where the viewer left it, as its button does. */
     fun resume(sp: SeriesPage) {
         val r = resumePoint(sp)

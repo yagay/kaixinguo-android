@@ -124,10 +124,6 @@ class Player internal constructor(
     /** Whether the player's screen shows. */
     var isPresented by mutableStateOf(false)
 
-    /** Reel mode plays inside the tab rather than opening a second player window. */
-    var reelMode by mutableStateOf(false)
-        private set
-
     /** Whether picture in picture shows the video, so leaving the screen keeps it playing. */
     var inPictureInPicture by mutableStateOf(false)
 
@@ -211,7 +207,7 @@ class Player internal constructor(
      * Opens the player on episode n of the series, from start seconds in;
      * `paused`, it shows the episode there without playing it.
      */
-    fun play(seriesID: String, n: Int, start: Double = 0.0, paused: Boolean = false, inReels: Boolean = false) {
+    fun play(seriesID: String, n: Int, start: Double = 0.0, paused: Boolean = false) {
         gen++
         if (seriesID != this.seriesID) wide = false // another series may be shot the other way
         this.seriesID = seriesID
@@ -221,8 +217,7 @@ class Player internal constructor(
         away = false // one asked for while away, as from the notification, plays there
         pending = false
         state = PlayerState.Resolving
-        reelMode = inReels
-        isPresented = !inReels
+        isPresented = true
         // In picture in picture the old episode stays in the window until the next replaces it.
         stopItem(keep = inPictureInPicture)
         val sp = app.seriesEntry(seriesID)
@@ -232,22 +227,6 @@ class Player internal constructor(
             return
         }
         startEpisode(sp)
-    }
-
-    /** Use the existing player and auto-next-episode logic in the vertical reel feed. */
-    fun playReel(seriesID: String, n: Int, start: Double = 0.0) =
-        play(seriesID, n, start, inReels = true)
-
-    /** When leaving the feed, prevent an in-flight resolution from starting hidden playback. */
-    fun stopReel() {
-        if (!reelMode) return
-        reelMode = false
-        video.pause()
-        if (state == PlayerState.Resolving) {
-            gen++
-            pending = false
-            state = PlayerState.Idle
-        }
     }
 
     /** Starts the episode that waited for its series, or says why it can't. */
@@ -360,9 +339,9 @@ class Player internal constructor(
     fun step(d: Int) {
         val sp = page ?: return
         if (d > 0) {
-            app.following(sp, number)?.let { play(it.first, it.second, inReels = reelMode) }
+            app.following(sp, number)?.let { play(it.first, it.second) }
         } else if (sp.episode(number + d) != null) {
-            play(sp.id, number + d, inReels = reelMode)
+            play(sp.id, number + d)
         }
     }
 
@@ -405,7 +384,7 @@ class Player internal constructor(
         val id = seriesID ?: return
         if (q == quality || !(state == PlayerState.Playing || state == PlayerState.Buffering)) return
         val t = video.position
-        play(id, number, if (t.isFinite()) t else 0.0, inReels = reelMode)
+        play(id, number, if (t.isFinite()) t else 0.0)
     }
 
     fun chooseSleep(s: Sleep) {
@@ -429,7 +408,7 @@ class Player internal constructor(
         var from = start
         val w = app.history.get(id)
         if (w != null && w.episode == number && !w.finished) from = maxOf(from, w.position - 3)
-        play(id, number, from, inReels = reelMode)
+        play(id, number, from)
     }
 
     /**
@@ -466,7 +445,7 @@ class Player internal constructor(
      * to and whether it played, so that coming back plays it on.
      */
     fun leaveApp() {
-        if ((!isPresented && !reelMode) || away) return
+        if (!isPresented || away) return
         playOnReturn = playing
         away = true
         video.pause()
@@ -479,7 +458,7 @@ class Player internal constructor(
         val play = playOnReturn
         away = false
         playOnReturn = false
-        if (play && (isPresented || reelMode) && video.hasItem && (state == PlayerState.Buffering || state == PlayerState.Playing)) video.play()
+        if (play && isPresented && video.hasItem && (state == PlayerState.Buffering || state == PlayerState.Playing)) video.play()
     }
 
     // MARK: - Double speed while held
