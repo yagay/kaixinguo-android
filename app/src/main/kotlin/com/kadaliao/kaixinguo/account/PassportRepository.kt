@@ -1,6 +1,11 @@
 package com.kadaliao.kaixinguo.account
 
 import android.content.Context
+import com.hongguo.account.protocol.AccountCredentials
+import com.hongguo.account.protocol.AccountProtocolException
+import com.hongguo.account.protocol.AppPhoneLogin
+import com.hongguo.account.protocol.PhoneLogin
+import okhttp3.OkHttpClient
 import com.kadaliao.kaixinguo.diagnostics.Diagnostics
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -38,6 +43,7 @@ data class PassportUiState(
 class PassportRepository(
     context: Context,
     private val onVerifiedCookie: (String) -> Unit,
+    private val onVerifiedAppCredentials: (AccountCredentials) -> Unit,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val prefs = context.getSharedPreferences("kxg_passport_throttle", Context.MODE_PRIVATE)
@@ -45,11 +51,22 @@ class PassportRepository(
     val state: StateFlow<PassportUiState> = mutable.asStateFlow()
     private var generation = 0L
     private var client: WebPassportClient? = null
+    private var appClient: AppPhoneLogin? = null
 
     private fun supersede(): Pair<Long, WebPassportClient> {
         generation++
         client?.cancel()
+        appClient?.cancel()
+        appClient = null
         return generation to WebPassportClient().also { client = it }
+    }
+
+    private fun supersedeSms(): Pair<Long, AppPhoneLogin> {
+        generation++
+        client?.cancel()
+        client = null
+        appClient?.cancel()
+        return generation to AppPhoneLogin(OkHttpClient()).also { appClient = it }
     }
 
     fun qrLogin() {
@@ -118,14 +135,14 @@ class PassportRepository(
             )
             return
         }
-        try { WebPassportClient.phone(number) } catch (e: IllegalArgumentException) {
+        try { PhoneLogin.parse(number) } catch (e: IllegalArgumentException) {
             mutable.value = PassportUiState(
                 phase = PassportPhase.FAILED,
                 message = e.message.orEmpty().take(120),
             )
             return
         }
-        val (token, auth) = supersede()
+        val (token, auth) = supersedeSms()
         // Persist before the first network packet to prevent duplicate sends
         // after a timeout, process death or repeated taps.
         val throttle = System.currentTimeMillis() + 60000L
@@ -133,21 +150,23 @@ class PassportRepository(
         mutable.value = PassportUiState(
             phase = PassportPhase.SMS_SENDING,
             smsRetryAt = throttle,
-            message = "正在向官网申请验证码…",
+            message = "正在通过红果 App 认证接口申请验证码…",
         )
-        Diagnostics.record("passport", "sms_requested")
+        Diagnostics.record("passport", "sms_app_requested")
         scope.launch {
             try {
                 val receipt = withContext(Dispatchers.IO) { auth.sendSms(number) }
                 if (generation != token) return@launch
-                prefs.edit().putLong("retry_at", receipt.retryAt).apply()
+                val retryAt = System.currentTimeMillis() +
+                    receipt.retrySeconds.coerceIn(30, 3600) * 1000L
+                prefs.edit().putLong("retry_at", retryAt).apply()
                 mutable.value = PassportUiState(
                     phase = PassportPhase.SMS_SENT,
-                    smsRetryAt = receipt.retryAt,
-                    maskedPhone = receipt.masked,
+                    smsRetryAt = retryAt,
+                    maskedPhone = receipt.maskedMobile,
                     message = "验证码已申请，请按短信输入；不会自动重新发送",
                 )
-                Diagnostics.record("passport", "sms_sent")
+                Diagnostics.record("passport", "sms_app_sent")
             } catch (e: Exception) {
                 if (generation == token) failureState("sms_failed", e)
             }
@@ -155,34 +174,34 @@ class PassportRepository(
     }
 
     fun verifySms(code: String) {
-        val auth = client ?: return
+        val auth = appClient ?: return
         if (mutable.value.phase != PassportPhase.SMS_SENT) return
         val token = generation
         val before = mutable.value
         mutable.value = before.copy(
             phase = PassportPhase.SMS_VERIFYING,
-            message = "正在向官网核验验证码…",
+            message = "正在向红果 App 认证接口核验验证码…",
         )
         scope.launch {
             try {
-                val cookie = withContext(Dispatchers.IO) { auth.verifySms(code) }
+                val credentials = withContext(Dispatchers.IO) { auth.verify(code) }
                 if (generation != token) return@launch
                 mutable.value = PassportUiState(
                     phase = PassportPhase.COMPLETED,
-                    message = "官网已确认验证码，正在验证账号身份",
+                    message = "App 验证码已确认，正在验证账号业务身份",
                 )
-                Diagnostics.record("passport", "sms_confirmed")
-                onVerifiedCookie(cookie)
+                Diagnostics.record("passport", "sms_app_confirmed")
+                onVerifiedAppCredentials(credentials)
                 auth.cancel()
-                client = null
-            } catch (e: PassportException) {
+                appClient = null
+            } catch (e: PhoneLogin.Failure) {
                 if (generation != token) return@launch
                 mutable.value = before.copy(
-                    phase = if (e.code == 1102) PassportPhase.SMS_SENT else PassportPhase.FAILED,
+                    phase = if (e.canRetryCode) PassportPhase.SMS_SENT else PassportPhase.FAILED,
                     message = safeMessage(e),
                 )
-                Diagnostics.record("passport", "sms_code_rejected")
-                Diagnostics.record("passport", passportErrorClass(e))
+                Diagnostics.record("passport", if (e.needsWebsite)
+                    "sms_app_challenge_required" else "sms_app_code_rejected")
             } catch (e: Exception) {
                 if (generation == token) failureState("sms_verify_failed", e)
             }
@@ -193,6 +212,8 @@ class PassportRepository(
         generation++
         client?.cancel()
         client = null
+        appClient?.cancel()
+        appClient = null
         mutable.value = PassportUiState()
         Diagnostics.record("passport", "cancelled")
     }
@@ -204,10 +225,17 @@ class PassportRepository(
             message = safeMessage(error),
         )
         Diagnostics.record("passport", event)
-        Diagnostics.record("passport", passportErrorClass(error))
+        Diagnostics.record("passport", when (error) {
+            is PhoneLogin.Failure -> if (error.needsWebsite)
+                "sms_app_challenge_required" else "sms_app_rejected"
+            is AccountProtocolException -> "sms_app_transport_rejected"
+            else -> passportErrorClass(error)
+        })
     }
 
     private fun safeMessage(error: Exception): String = when (error) {
+        is PhoneLogin.Failure -> error.message.orEmpty().take(200)
+        is AccountProtocolException -> error.message.orEmpty().take(200)
         is PassportException -> error.message.orEmpty()
         is PassportHttpException -> when (error.status) {
             401, 403 -> "官网拒绝本次短信登录请求（HTTP ${error.status}）。可通过页面上方的「打开红果官网登录」完成平台验证"
@@ -216,6 +244,6 @@ class PassportRepository(
             else -> "官网短信接口返回 HTTP ${error.status}，可尝试网页内登录"
         }
         is IllegalArgumentException -> error.message.orEmpty().take(120)
-        else -> "官网短信请求未完成，请检查网络；也可以使用页面上方的官网登录"
+        else -> "红果 App 短信请求未完成，请检查网络；如需滑块验证可使用上方的官网登录"
     }
 }
