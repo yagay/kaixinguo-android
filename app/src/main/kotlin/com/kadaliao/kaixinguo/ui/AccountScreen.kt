@@ -60,6 +60,8 @@ fun AccountScreen() {
     val passport = app.passport
     val state by account.state.collectAsState()
     val passportState by passport.state.collectAsState()
+    val websiteHistory by account.websiteHistory.collectAsState()
+    val router = LocalRouter.current
     var loginMode by remember { mutableIntStateOf(0) }
     var phone by remember { mutableStateOf("") }
     var smsCode by remember { mutableStateOf("") }
@@ -289,10 +291,62 @@ fun AccountScreen() {
                     },
                 )
             }
+
+            item { HorizontalDivider() }
+            item {
+                ListItem(
+                    headlineContent = { Text("官网观看历史（只读·实验性）") },
+                    supportingContent = {
+                        Text(
+                            "独立尝试官网 /api/pc/watch-history 接口；不是红果 App 云端历史。" +
+                                "仅本次登录会话读取，不合并或上传本机观看记录。",
+                        )
+                    },
+                    trailingContent = {
+                        TextButton(
+                            onClick = account::loadWebsiteHistory,
+                            enabled = state.websiteSignedIn && !websiteHistory.loading,
+                        ) { Text("读取") }
+                    },
+                )
+            }
+            if (websiteHistory.loading) {
+                item { CircularProgressIndicator(modifier = Modifier.padding(16.dp)) }
+            }
+            if (websiteHistory.error.isNotBlank()) {
+                item {
+                    Text(
+                        websiteHistory.error, modifier = Modifier.padding(16.dp),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+            if (websiteHistory.loaded && websiteHistory.records.isEmpty()) {
+                item {
+                    Text(
+                        "官网本次返回空的观看历史。此结果不代表红果 App 账号没有历史。",
+                        modifier = Modifier.padding(16.dp),
+                    )
+                }
+            }
+            items(websiteHistory.records.size) { index ->
+                val record = websiteHistory.records[index]
+                ListItem(
+                    headlineContent = { Text(record.series.title) },
+                    supportingContent = {
+                        Text("第 " + record.episode + " 集 · 官网读取（不修改本机进度）")
+                    },
+                    trailingContent = {
+                        TextButton(
+                            onClick = { router.open(Route.Series(record.series.seriesId)) },
+                        ) { Text("详情") }
+                    },
+                )
+            }
             item {
                 Text(
-                    "此页面只通过红果官网进行人工验证；不会索取或保存账号密码、短信验证码。" +
-                        "若平台要求滑块等验证，请直接在官网页面完成。",
+                    "支持网页内人工登录、扫码和官网验证码登录；密码与验证码不会保存到应用账号存储。" +
+                        "若平台要求滑块等验证，请直接在官方网页内完成。",
                     modifier = Modifier.padding(16.dp),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

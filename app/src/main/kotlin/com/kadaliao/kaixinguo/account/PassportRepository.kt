@@ -118,6 +118,13 @@ class PassportRepository(
             )
             return
         }
+        try { WebPassportClient.phone(number) } catch (e: IllegalArgumentException) {
+            mutable.value = PassportUiState(
+                phase = PassportPhase.FAILED,
+                message = e.message.orEmpty().take(120),
+            )
+            return
+        }
         val (token, auth) = supersede()
         // Persist before the first network packet to prevent duplicate sends
         // after a timeout, process death or repeated taps.
