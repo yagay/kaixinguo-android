@@ -26,6 +26,7 @@ class AccountRepository internal constructor(
     private val scope: CoroutineScope,
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val historyGateway: WebsiteHistoryGateway = OfficialWebsiteHistoryGateway(),
+    private val recommendationPort: AccountRecommendationPort = OfficialAccountRecommendations(),
 ) {
     constructor(context: Context) : this(
         AccountStore(context), OfficialWebsiteGateway(),
@@ -36,6 +37,9 @@ class AccountRepository internal constructor(
     private var generation = 0L
     private val mutable = MutableStateFlow(AccountUiState(phase = AccountPhase.RESTORING))
     val state: StateFlow<AccountUiState> = mutable.asStateFlow()
+    private var recommendationProof: BusinessIdentity? = null
+    private val recommendationMutable = MutableStateFlow(AccountRecommendationState())
+    val recommendations: StateFlow<AccountRecommendationState> = recommendationMutable.asStateFlow()
     private val historyMutable = MutableStateFlow(WebsiteHistoryUiState())
     val websiteHistory: StateFlow<WebsiteHistoryUiState> = historyMutable.asStateFlow()
 
@@ -45,7 +49,8 @@ class AccountRepository internal constructor(
 
     fun restore() {
         val token = synchronized(guard) { ++generation }
-        mutable.value = AccountUiState(phase = AccountPhase.RESTORING)
+        mutable.value = AccountUiState(phase = AccountPhase.RESTORING, sessionRevision = token)
+        resetRecommendations()
         historyMutable.value = WebsiteHistoryUiState()
         scope.launch {
             val saved = try {
@@ -55,13 +60,14 @@ class AccountRepository internal constructor(
                     phase = AccountPhase.UNAVAILABLE,
                     message = "已保存的账号资料无法解密。可退出账号后重新登录。",
                     hasSavedSession = true,
+                    sessionRevision = token,
                 )
                 Diagnostics.record("account", "restore_failed")
                 return@launch
             }
             if (!isCurrent(token)) return@launch
             if (saved == null) {
-                mutable.value = AccountUiState()
+                mutable.value = AccountUiState(sessionRevision = token)
                 return@launch
             }
             verifySaved(saved, token)
@@ -76,8 +82,10 @@ class AccountRepository internal constructor(
         }
         val token = synchronized(guard) { ++generation }
         historyMutable.value = WebsiteHistoryUiState()
+        resetRecommendations()
         mutable.value = AccountUiState(
             phase = AccountPhase.VERIFYING,
+            sessionRevision = token,
             hasSavedSession = hadSavedSession,
             message = "正在核验官网账号…",
         )
@@ -105,12 +113,14 @@ class AccountRepository internal constructor(
                     hasSavedSession = true,
                     message = "官网账号已验证；红果 App 云端资料尚未连接",
                     verifiedAtEpochMs = saved.verifiedAtEpochMs,
+                    sessionRevision = token,
                 )
                 Diagnostics.record("account", "website_verified")
             } catch (_: WebsiteAuthException) {
                 if (isCurrent(token)) mutable.value = AccountUiState(
                     phase = AccountPhase.EXPIRED,
                     hasSavedSession = hadSavedSession,
+                    sessionRevision = token,
                     message = "官网未确认登录，请重新打开官网登录页面完成验证",
                 )
                 Diagnostics.record("account", "website_rejected")
@@ -118,6 +128,7 @@ class AccountRepository internal constructor(
                 if (isCurrent(token)) mutable.value = AccountUiState(
                     phase = AccountPhase.UNAVAILABLE,
                     hasSavedSession = hadSavedSession,
+                    sessionRevision = token,
                     message = "官网账号核验暂不可用，请检查网络后重新登录",
                 )
                 Diagnostics.record("account", "website_verification_unavailable")
@@ -127,6 +138,92 @@ class AccountRepository internal constructor(
 
     fun recheck() {
         restore()
+    }
+
+    private fun resetRecommendations() {
+        synchronized(guard) { recommendationProof = null }
+        recommendationMutable.value = AccountRecommendationState()
+    }
+
+    /** Reset only the account recommendation attempt, not the logged-in session. */
+    fun retryAccountRecommendations() {
+        if (!mutable.value.websiteSignedIn) return
+        val attempt = recommendationMutable.value.attempt + 1
+        synchronized(guard) { recommendationProof = null }
+        recommendationMutable.value = AccountRecommendationState(attempt = attempt)
+        Diagnostics.record("account_recommendations", "retry_requested")
+    }
+
+    /**
+     * This is the only credentialed feed entrypoint. Cookies never leave the
+     * repository and are never passed through Compose, SDK, logs or disk cache.
+     */
+    suspend fun fetchAccountRecommendations(cursor: String): AccountRecommendPage {
+        val token = synchronized(guard) { generation }
+        if (!mutable.value.websiteSignedIn) {
+            throw AccountRecommendationException(AccountRecommendationException.Kind.EXPIRED)
+        }
+        if (cursor.isEmpty()) {
+            recommendationMutable.value = recommendationMutable.value.copy(
+                phase = AccountRecommendationPhase.CHECKING,
+                message = "正在确认红果 App 业务账号身份",
+            )
+        }
+        Diagnostics.record("account_recommendations", if (cursor.isEmpty()) "first_page_requested" else "next_page_requested")
+        try {
+            val response = withContext(io) {
+                val saved = synchronized(guard) {
+                    if (generation == token) store.load() else null
+                } ?: throw AccountRecommendationException(AccountRecommendationException.Kind.EXPIRED)
+                val proof = synchronized(guard) {
+                    if (generation == token) recommendationProof else null
+                } ?: recommendationPort.verifyBusinessIdentity(saved.cookie).also {
+                    synchronized(guard) {
+                        if (generation == token) recommendationProof = it
+                    }
+                }
+                if (!isCurrent(token)) throw CancellationException("Account changed")
+                recommendationPort.page(saved.cookie, cursor, proof)
+            }
+            if (!isCurrent(token) || !mutable.value.websiteSignedIn) {
+                throw CancellationException("Account changed")
+            }
+            recommendationMutable.value = recommendationMutable.value.copy(
+                phase = AccountRecommendationPhase.READY,
+                message = "已取得红果 App 网关确认的账号推荐响应",
+            )
+            Diagnostics.record("account_recommendations", "verified_page_loaded")
+            return response
+        } catch (stop: CancellationException) {
+            throw stop
+        } catch (failure: Exception) {
+            if (isCurrent(token)) {
+                val issue = failure as? AccountRecommendationException
+                val phase = when (issue?.kind) {
+                    AccountRecommendationException.Kind.SIGNATURE_REQUIRED ->
+                        AccountRecommendationPhase.SIGNATURE_REQUIRED
+                    AccountRecommendationException.Kind.EXPIRED ->
+                        AccountRecommendationPhase.EXPIRED
+                    AccountRecommendationException.Kind.RATE_LIMITED ->
+                        AccountRecommendationPhase.RATE_LIMITED
+                    AccountRecommendationException.Kind.UNVERIFIED ->
+                        AccountRecommendationPhase.UNVERIFIED
+                    else -> AccountRecommendationPhase.UNAVAILABLE
+                }
+                val message = issue?.message ?: "无法确认账号推荐接口，本次使用匿名推荐"
+                recommendationMutable.value = recommendationMutable.value.copy(phase = phase, message = message)
+                Diagnostics.record("account_recommendations", when (phase) {
+                    AccountRecommendationPhase.SIGNATURE_REQUIRED -> "signing_required"
+                    AccountRecommendationPhase.EXPIRED -> "session_expired"
+                    AccountRecommendationPhase.RATE_LIMITED -> "rate_limited"
+                    AccountRecommendationPhase.UNVERIFIED -> "identity_unverified"
+                    else -> "network_or_format_unavailable"
+                })
+            }
+            // This failure is handled by the Reel source selector. No fake
+            // authenticated cards may be displayed.
+            throw failure
+        }
     }
 
     /** Read-only website history. It cannot grant access to the signed App cloud. */
@@ -164,11 +261,17 @@ class AccountRepository internal constructor(
     }
 
     fun signOut() {
-        synchronized(guard) {
+        val token = synchronized(guard) {
             generation++
+            recommendationProof = null
             store.clear()
+            generation
         }
-        mutable.value = AccountUiState(message = "已退出官网账号，本机收藏和历史未清除")
+        recommendationMutable.value = AccountRecommendationState()
+        mutable.value = AccountUiState(
+            message = "已退出官网账号，本机收藏和历史未清除",
+            sessionRevision = token,
+        )
         historyMutable.value = WebsiteHistoryUiState()
         Diagnostics.record("account", "signed_out")
     }
@@ -182,12 +285,14 @@ class AccountRepository internal constructor(
                 profile = profile, hasSavedSession = true,
                 message = "官网账号已恢复；云端收藏和历史尚未连接",
                 verifiedAtEpochMs = System.currentTimeMillis(),
+                sessionRevision = token,
             )
             Diagnostics.record("account", "restored_verified")
         } catch (_: WebsiteAuthException) {
             if (!isCurrent(token)) return
             mutable.value = AccountUiState(
                 phase = AccountPhase.EXPIRED, hasSavedSession = true,
+                sessionRevision = token,
                 message = "官网登录已失效，请重新登录",
             )
             Diagnostics.record("account", "restored_expired")
@@ -195,6 +300,7 @@ class AccountRepository internal constructor(
             if (!isCurrent(token)) return
             mutable.value = AccountUiState(
                 phase = AccountPhase.UNAVAILABLE, hasSavedSession = true,
+                sessionRevision = token,
                 message = "网络或账号接口暂不可用，已加密保留会话，可重新验证",
             )
             Diagnostics.record("account", "restore_network_unavailable")
