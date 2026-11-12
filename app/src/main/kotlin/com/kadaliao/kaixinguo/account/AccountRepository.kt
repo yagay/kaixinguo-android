@@ -3,6 +3,7 @@ package com.kadaliao.kaixinguo.account
 import android.content.Context
 import com.kadaliao.kaixinguo.diagnostics.Diagnostics
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,9 +21,10 @@ import kotlinx.coroutines.withContext
  * account after logout or a newer login. Storage writes are synchronized.
  */
 class AccountRepository internal constructor(
-    private val store: AccountStore,
+    private val store: AccountPersistence,
     private val gateway: WebsiteAccountGateway,
     private val scope: CoroutineScope,
+    private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
     constructor(context: Context) : this(
         AccountStore(context), OfficialWebsiteGateway(),
@@ -43,7 +45,7 @@ class AccountRepository internal constructor(
         mutable.value = AccountUiState(phase = AccountPhase.RESTORING)
         scope.launch {
             val saved = try {
-                withContext(Dispatchers.IO) { synchronized(guard) { store.load() } }
+                withContext(io) { synchronized(guard) { store.load() } }
             } catch (_: Exception) {
                 if (isCurrent(token)) mutable.value = AccountUiState(
                     phase = AccountPhase.UNAVAILABLE,
@@ -72,12 +74,12 @@ class AccountRepository internal constructor(
         Diagnostics.record("account", "official_login_received")
         scope.launch {
             try {
-                val profile = withContext(Dispatchers.IO) { gateway.verify(cookie) }
+                val profile = withContext(io) { gateway.verify(cookie) }
                 if (!isCurrent(token)) return@launch
                 val saved = StoredWebsiteSession(
                     cookie, profile.nickname, profile.websiteUserId, System.currentTimeMillis(),
                 )
-                val persisted = withContext(Dispatchers.IO) {
+                val persisted = withContext(io) {
                     synchronized(guard) {
                         if (generation != token) false
                         else {
@@ -125,7 +127,7 @@ class AccountRepository internal constructor(
 
     private suspend fun verifySaved(saved: StoredWebsiteSession, token: Long) {
         try {
-            val profile = withContext(Dispatchers.IO) { gateway.verify(saved.cookie) }
+            val profile = withContext(io) { gateway.verify(saved.cookie) }
             if (!isCurrent(token)) return
             mutable.value = AccountUiState(
                 phase = AccountPhase.WEBSITE_SIGNED_IN,

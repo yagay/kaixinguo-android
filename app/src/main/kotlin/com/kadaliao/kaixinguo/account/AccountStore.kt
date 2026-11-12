@@ -17,7 +17,13 @@ import javax.crypto.spec.GCMParameterSpec
  * The application's normal session.json, favorites.json and history.json are
  * untouched and cannot accidentally contain website credentials.
  */
-internal class AccountStore(context: Context) {
+internal interface AccountPersistence {
+    fun load(): StoredWebsiteSession?
+    fun save(session: StoredWebsiteSession)
+    fun clear()
+}
+
+internal class AccountStore(context: Context) : AccountPersistence {
     private val file = AtomicFile(File(context.noBackupFilesDir, "kxg_account_v1.enc"))
     private val alias = "com.kadaliao.kaixinguo.website_account.v1"
 
@@ -38,7 +44,7 @@ internal class AccountStore(context: Context) {
         }
     }
 
-    fun load(): StoredWebsiteSession? {
+    override fun load(): StoredWebsiteSession? {
         if (!file.baseFile.exists()) return null
         val data = file.readFully()
         require(data.size > 32 && data[0] == 1.toByte()) { "Invalid account snapshot" }
@@ -56,7 +62,7 @@ internal class AccountStore(context: Context) {
         )
     }
 
-    fun save(session: StoredWebsiteSession) {
+    override fun save(session: StoredWebsiteSession) {
         val payload = JSONObject()
             .put("cookie", session.cookie)
             .put("nickname", session.nickname)
@@ -77,7 +83,7 @@ internal class AccountStore(context: Context) {
         }
     }
 
-    fun clear() {
+    override fun clear() {
         file.delete()
     }
 }

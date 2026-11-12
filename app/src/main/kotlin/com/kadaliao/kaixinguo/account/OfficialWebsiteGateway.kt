@@ -59,28 +59,34 @@ internal class OfficialWebsiteGateway : WebsiteAccountGateway {
                     bytes.write(buf, 0, n)
                 }
             }
-            val reply = JSONObject(bytes.toString(Charsets.UTF_8.name()))
-            if (reply.optString("message") != "success") throw WebsiteAuthException()
-            val data = reply.optJSONObject("data") ?: throw WebsiteAuthException()
-            val user = data.optJSONObject("user_info") ?: data.optJSONObject("user") ?: data
-            val loginFlag = data.opt("has_login")
-            val loggedIn = loginFlag == true || loginFlag == 1 ||
-                loginFlag == "1" || loginFlag == "true"
-            val userId = sequenceOf(
-                user.optString("user_id"), user.optString("uid"), user.optString("id"),
-            ).firstOrNull { it.isNotBlank() && it != "0" }.orEmpty()
-            // Explicit negative status overrides public user information.
-            if (loginFlag != null && !loggedIn) throw WebsiteAuthException()
-            if (!loggedIn && userId.isBlank()) throw WebsiteAuthException()
-            val nickname = sequenceOf(
-                user.optString("nickname"), user.optString("name"),
-                data.optString("nickname"),
-            ).firstOrNull { it.isNotBlank() }.orEmpty().take(120)
-            return WebsiteProfile(nickname.ifBlank { "红果官网用户" }, userId.take(128))
+            return parseWebsiteProfile(JSONObject(bytes.toString(Charsets.UTF_8.name())))
+
         } catch (error: org.json.JSONException) {
             throw IOException("Official website response format changed")
         } finally {
             conn.disconnect()
         }
     }
+}
+
+/**
+ * A pure, testable boundary: a public nickname or HTTP 200 is not enough to
+ * claim authentication. The website must explicitly affirm login or provide
+ * an authenticated user identity in a successful passport response.
+ */
+internal fun parseWebsiteProfile(reply: JSONObject): WebsiteProfile {
+    if (reply.optString("message") != "success") throw WebsiteAuthException()
+    val data = reply.optJSONObject("data") ?: throw WebsiteAuthException()
+    val user = data.optJSONObject("user_info") ?: data.optJSONObject("user") ?: data
+    val flag = data.opt("has_login")
+    val signedIn = flag == true || flag == 1 || flag == "1" || flag == "true"
+    val id = sequenceOf(
+        user.optString("user_id"), user.optString("uid"), user.optString("id"),
+    ).firstOrNull { it.isNotBlank() && it != "0" }.orEmpty()
+    if (flag != null && !signedIn) throw WebsiteAuthException()
+    if (!signedIn && id.isBlank()) throw WebsiteAuthException()
+    val name = sequenceOf(
+        user.optString("nickname"), user.optString("name"), data.optString("nickname"),
+    ).firstOrNull { it.isNotBlank() }.orEmpty().take(120)
+    return WebsiteProfile(name.ifBlank { "红果官网用户" }, id.take(128))
 }
