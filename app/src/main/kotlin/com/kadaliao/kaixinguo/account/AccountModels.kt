@@ -2,7 +2,7 @@ package com.kadaliao.kaixinguo.account
 
 /** Website authentication is not the same as a verified Hongguo app business session. */
 enum class AccountPhase {
-    SIGNED_OUT, RESTORING, VERIFYING, WEBSITE_SIGNED_IN, UNAVAILABLE, EXPIRED,
+    SIGNED_OUT, RESTORING, VERIFYING, WEBSITE_SIGNED_IN, APP_SIGNED_IN, UNAVAILABLE, EXPIRED,
 }
 
 data class WebsiteProfile(val nickname: String, val websiteUserId: String = "")
@@ -16,14 +16,21 @@ data class AccountUiState(
     val sessionRevision: Long = 0L,
 ) {
     val websiteSignedIn: Boolean get() = phase == AccountPhase.WEBSITE_SIGNED_IN
+    val appSignedIn: Boolean get() = phase == AccountPhase.APP_SIGNED_IN
+    val signedIn: Boolean get() = websiteSignedIn || appSignedIn
 }
 
 /** Redacted on purpose. Never include login credentials in exceptions or diagnostics. */
+internal enum class SessionSource { WEBSITE, APP }
+
 internal class StoredWebsiteSession(
     val cookie: String,
     val nickname: String,
     val websiteUserId: String,
     val verifiedAtEpochMs: Long,
+    val source: SessionSource = SessionSource.WEBSITE,
+    val deviceId: String = "",
+    val installId: String = "",
 ) {
     override fun toString(): String = "StoredWebsiteSession([redacted])"
 }
