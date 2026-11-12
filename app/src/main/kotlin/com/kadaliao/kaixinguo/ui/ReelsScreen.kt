@@ -78,6 +78,7 @@ fun ReelsScreen(inPip: Boolean) {
     var recommendationIndex by rememberSaveable { mutableIntStateOf(0) }
     var realIndex by rememberSaveable { mutableIntStateOf(0) }
     var comicIndex by rememberSaveable { mutableIntStateOf(0) }
+    var refreshVersion by rememberSaveable { mutableIntStateOf(0) }
 
     val feed = when (channel) {
         Channel.RECOMMEND -> model.home
@@ -116,7 +117,7 @@ fun ReelsScreen(inPip: Boolean) {
         // This avoids attaching the same ExoPlayer to multiple page surfaces.
         if (!inPip) VideoSurface(Modifier.fillMaxSize())
 
-        key(channel) {
+        key(channel, refreshVersion) {
             FeedPages(
                 feed = feed,
                 initialPage = savedIndex,
@@ -131,7 +132,9 @@ fun ReelsScreen(inPip: Boolean) {
 
         if (!inPip) {
             // Reuse the existing accurate playback clock and seek bar.
-            ProgressBar(Modifier.align(Alignment.BottomCenter))
+            if (feed.cards.isNotEmpty() && player.isPresented) {
+                ProgressBar(Modifier.align(Alignment.BottomCenter))
+            }
             Box(
                 Modifier.fillMaxWidth().height(100.dp).align(Alignment.TopCenter)
                     .background(
@@ -153,7 +156,12 @@ fun ReelsScreen(inPip: Boolean) {
                     Channel.entries.forEach { option ->
                         val active = option == channel
                         Column(
-                            Modifier.clickable { channel = option }.padding(vertical = 12.dp),
+                            Modifier.clickable {
+                                if (option != channel) {
+                                    player.leave()
+                                    channel = option
+                                }
+                            }.padding(vertical = 12.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                             Text(
@@ -174,8 +182,10 @@ fun ReelsScreen(inPip: Boolean) {
                 IconButton(
                     onClick = {
                         scope.launch {
+                            player.leave()
                             feed.refresh(merging = false)
                             saveIndex(0)
+                            refreshVersion++
                         }
                     },
                     modifier = Modifier.size(42.dp),
@@ -228,7 +238,7 @@ private fun FeedPages(
 
     if (cards.isEmpty()) {
         Column(
-            Modifier.fillMaxSize().padding(28.dp),
+            Modifier.fillMaxSize().background(Color.Black).padding(28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
