@@ -169,7 +169,13 @@ fun AccountScreen() {
                     if (loginMode == 0) {
                         val qr = passportState.qrImage
                         val bitmap = remember(qr) {
-                            qr?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+                            qr?.let { image ->
+                                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                                BitmapFactory.decodeByteArray(image, 0, image.size, bounds)
+                                if (bounds.outWidth in 100..1024 && bounds.outHeight in 100..1024) {
+                                    BitmapFactory.decodeByteArray(image, 0, image.size)
+                                } else null
+                            }
                         }
                         if (bitmap != null) {
                             Image(
