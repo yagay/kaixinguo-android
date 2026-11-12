@@ -30,6 +30,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,6 +42,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -49,6 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kadaliao.kaixinguo.KaixinguoApplication
 import com.kadaliao.kaixinguo.diagnostics.Diagnostics
 import com.kadaliao.kaixinguo.model.AppModel
 import com.kadaliao.kaixinguo.model.Card
@@ -73,6 +76,26 @@ fun ReelsScreen(inPip: Boolean) {
     val player = model.player
     val router = LocalRouter.current
     val scope = rememberCoroutineScope()
+    val account = (LocalContext.current.applicationContext as KaixinguoApplication).account
+    val accountSession by account.state.collectAsState()
+    val accountRecommendation by account.recommendations.collectAsState()
+    // Separate source: credentialed results must never enter the anonymous
+    // discovery SDK, its persistent cache or any other feed.
+    val accountFeed = remember(model, account, accountSession.sessionRevision, accountRecommendation.attempt) {
+        Feed(
+            model.scope,
+            { cursor ->
+                val page = account.fetchAccountRecommendations(cursor)
+                FeedPage(cards = page.cards, cursor = page.cursor, more = page.hasMore)
+            },
+            retryEmptyOnError = false,
+        )
+    }
+    LaunchedEffect(accountFeed, accountSession.websiteSignedIn) {
+        if (accountSession.websiteSignedIn && !accountFeed.started) accountFeed.loadMore()
+    }
+    val verifiedAccountSource = accountSession.websiteSignedIn &&
+        accountRecommendation.ready && accountFeed.cards.isNotEmpty()
     val realFeed = remember(model) { discoverFeed(model, Channel.REAL.sdkName) }
     val comicFeed = remember(model) { discoverFeed(model, Channel.COMIC.sdkName) }
     var channel by rememberSaveable { mutableStateOf(Channel.RECOMMEND) }
@@ -80,9 +103,10 @@ fun ReelsScreen(inPip: Boolean) {
     var realIndex by rememberSaveable { mutableIntStateOf(0) }
     var comicIndex by rememberSaveable { mutableIntStateOf(0) }
     var refreshVersion by rememberSaveable { mutableIntStateOf(0) }
+    LaunchedEffect(accountSession.sessionRevision, verifiedAccountSource) { recommendationIndex = 0 }
 
     val feed = when (channel) {
-        Channel.RECOMMEND -> model.home
+        Channel.RECOMMEND -> if (verifiedAccountSource) accountFeed else model.home
         Channel.REAL -> realFeed
         Channel.COMIC -> comicFeed
     }
@@ -118,7 +142,7 @@ fun ReelsScreen(inPip: Boolean) {
         // This avoids attaching the same ExoPlayer to multiple page surfaces.
         if (!inPip) VideoSurface(Modifier.fillMaxSize())
 
-        key(channel, refreshVersion) {
+        key(channel, refreshVersion, accountSession.sessionRevision, verifiedAccountSource) {
             FeedPages(
                 feed = feed,
                 initialPage = savedIndex,
@@ -186,7 +210,13 @@ fun ReelsScreen(inPip: Boolean) {
                         scope.launch {
                             Diagnostics.record("reels", "refresh_requested")
                             player.leave()
-                            feed.refresh(merging = false)
+                            if (channel == Channel.RECOMMEND && accountSession.websiteSignedIn) {
+                                // A fresh account attempt invalidates the previous cursor.
+                                account.retryAccountRecommendations()
+                                model.home.refresh(merging = false)
+                            } else {
+                                feed.refresh(merging = false)
+                            }
                             saveIndex(0)
                             refreshVersion++
                         }
@@ -195,6 +225,23 @@ fun ReelsScreen(inPip: Boolean) {
                 ) {
                     Icon(Icons.Filled.Refresh, contentDescription = "刷新刷剧列表", tint = Color.White)
                 }
+            }
+            if (channel == Channel.RECOMMEND) {
+                val recommendationLabel = when {
+                    verifiedAccountSource -> "红果 App 账号推荐（网关已验证）"
+                    !accountSession.websiteSignedIn -> "普通推荐 · 可在我的页面登录账号"
+                    accountRecommendation.message.isNotBlank() ->
+                        "普通推荐 · " + accountRecommendation.message
+                    else -> "普通推荐 · 正在验证账号推荐"
+                }
+                Text(
+                    recommendationLabel,
+                    color = Color.White.copy(alpha = 0.85f),
+                    fontSize = 11.sp,
+                    maxLines = 2,
+                    modifier = Modifier.align(Alignment.TopCenter)
+                        .statusBarsPadding().padding(top = 57.dp, start = 16.dp, end = 16.dp),
+                )
             }
         }
     }
