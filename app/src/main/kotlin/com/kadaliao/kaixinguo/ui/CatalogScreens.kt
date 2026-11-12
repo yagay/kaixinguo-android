@@ -44,6 +44,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -62,18 +63,51 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kadaliao.kaixinguo.model.Card
+import com.kadaliao.kaixinguo.model.Feed
+import com.kadaliao.kaixinguo.model.FeedPage
 import com.kadaliao.kaixinguo.model.Watch
 import com.kadaliao.kaixinguo.model.dayLabel
 import com.kadaliao.kaixinguo.model.friendly
 import com.kadaliao.kaixinguo.model.todayKey
 import kotlinx.coroutines.delay
 
-/** DiscoverScreen is the recommended series. */
+/** Same official App-account recommendation source as the full-screen reel feed. */
 @Composable
 fun DiscoverScreen() {
     val model = LocalModel.current
-    Page("推荐") {
-        FeedGrid(model.home, "暂时没有推荐", refresh = { model.home.refresh(merging = true) })
+    val account = (LocalContext.current.applicationContext as KaixinguoApplication).account
+    val session by account.state.collectAsState()
+    val status by account.recommendations.collectAsState()
+    val appFeed = remember(model, account, session.sessionRevision, status.attempt) {
+        Feed(
+            model.scope,
+            { cursor ->
+                val page = account.fetchAccountRecommendations(cursor)
+                FeedPage(page.cards, page.cursor, page.hasMore)
+            },
+            retryEmptyOnError = false,
+        )
+    }
+    val accountAttempt = session.signedIn && !status.blocked
+    val feed = if (accountAttempt) appFeed else model.home
+    Page("推荐", actions = {
+        if (session.signedIn) {
+            Text(
+                when {
+                    status.ready && appFeed.cards.isNotEmpty() -> "账号推荐"
+                    status.blocked -> "普通推荐"
+                    else -> "加载账号推荐"
+                },
+                modifier = Modifier.padding(end = 12.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }) {
+        FeedGrid(feed, "暂时没有推荐", refresh = {
+            if (session.signedIn) account.retryAccountRecommendations()
+            else model.home.refresh(merging = true)
+        })
     }
 }
 
