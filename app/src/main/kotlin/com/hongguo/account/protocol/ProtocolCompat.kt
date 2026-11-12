@@ -6,10 +6,10 @@ import org.json.JSONObject
 import java.io.IOException
 
 /** App and website credentials are not interchangeable. */
-internal enum class AccountCredentialSource { APP, WEBSITE }
+enum class AccountCredentialSource { APP, WEBSITE }
 
 /** Never print or log this object; its cookie and device fields are sensitive. */
-internal data class AccountCredentials(
+data class AccountCredentials(
     val cookie: String,
     val deviceId: String,
     val installId: String,
