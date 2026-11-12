@@ -67,7 +67,9 @@ fun AccountScreen() {
     val websiteHistory by account.websiteHistory.collectAsState()
     val recommendation by account.recommendations.collectAsState()
     val router = LocalRouter.current
-    var loginMode by remember { mutableIntStateOf(0) }
+    // Most users reach this page to enter a one-time SMS code.
+    // Keep the original Scan/SMS filter UI, but open SMS by default.
+    var loginMode by remember { mutableIntStateOf(1) }
     var phone by remember { mutableStateOf("") }
     var smsCode by remember { mutableStateOf("") }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -226,22 +228,35 @@ fun AccountScreen() {
                         ) {
                             Text(if (waitSeconds > 0) "请等待 " + waitSeconds + " 秒" else "发送登录验证码")
                         }
-                        if (passportState.phase == PassportPhase.SMS_SENT ||
-                            passportState.phase == PassportPhase.SMS_VERIFYING) {
+                        val canVerifyCode = passportState.phase == PassportPhase.SMS_SENT
+                        val isVerifyingCode = passportState.phase == PassportPhase.SMS_VERIFYING
+                        // Always show the OTP field in SMS mode. In the old UI,
+                        // a failed send request hid the entire field, making it
+                        // look as if the verification step did not exist.
+                        if (passportState.maskedPhone.isNotBlank()) {
                             Text("验证码已发送至 " + passportState.maskedPhone)
-                            OutlinedTextField(
-                                value = smsCode,
-                                onValueChange = { smsCode = it.filter(Char::isDigit).take(8) },
-                                label = { Text("短信验证码") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
+                        }
+                        OutlinedTextField(
+                            value = smsCode,
+                            onValueChange = { smsCode = it.filter(Char::isDigit).take(8) },
+                            label = { Text("短信验证码") },
+                            placeholder = { Text("输入收到的 4–8 位验证码") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Button(
+                            onClick = { passport.verifySms(smsCode) },
+                            enabled = smsCode.length in 4..8 && canVerifyCode &&
+                                !passportState.busy,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text(if (isVerifyingCode) "正在验证…" else "验证并登录") }
+                        if (!canVerifyCode && !isVerifyingCode) {
+                            Text(
+                                "请先发送验证码，收到短信后再验证。发送失败时可使用官网登录。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            Button(
-                                onClick = { val submitted = smsCode; smsCode = ""; passport.verifySms(submitted) },
-                                enabled = smsCode.length in 4..8 && !passportState.busy,
-                                modifier = Modifier.fillMaxWidth(),
-                            ) { Text("验证并登录") }
                         }
                     }
                     if (passportState.message.isNotBlank()) {
