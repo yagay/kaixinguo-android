@@ -65,6 +65,7 @@ fun AccountScreen() {
     val state by account.state.collectAsState()
     val passportState by passport.state.collectAsState()
     val websiteHistory by account.websiteHistory.collectAsState()
+    val recommendation by account.recommendations.collectAsState()
     val router = LocalRouter.current
     var loginMode by remember { mutableIntStateOf(0) }
     var phone by remember { mutableStateOf("") }
@@ -321,6 +322,31 @@ fun AccountScreen() {
                     },
                     trailingContent = {
                         TextButton(onClick = { router.open(Route.LocalFollows) }) { Text("查看") }
+                    },
+                )
+            }
+            item {
+                ListItem(
+                    headlineContent = { Text("红果账号个性化推荐") },
+                    supportingContent = {
+                        Text(
+                            when {
+                                !state.websiteSignedIn -> "当前未登录官网，刷剧使用普通推荐"
+                                recommendation.ready -> "已获取网关验证的账号推荐。刷剧的「推荐」自动使用独立账号列表。"
+                                recommendation.message.isNotBlank() ->
+                                    recommendation.message + "；仍显示普通推荐，不冒充账号结果。"
+                                else -> "官网登录不能代替 App 业务身份。进入刷剧后将只读验证账号推荐。"
+                            },
+                        )
+                    },
+                    trailingContent = {
+                        TextButton(
+                            enabled = state.websiteSignedIn,
+                            onClick = {
+                                account.retryAccountRecommendations()
+                                router.select(Tab.REELS)
+                            },
+                        ) { Text("验证") }
                     },
                 )
             }
