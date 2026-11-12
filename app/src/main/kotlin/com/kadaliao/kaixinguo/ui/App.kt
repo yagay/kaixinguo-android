@@ -24,11 +24,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.SmartDisplay
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.SmartDisplay
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Leaderboard
 import androidx.compose.material.icons.outlined.Search
@@ -83,7 +85,7 @@ fun App(model: AppModel, router: Router, covers: CoverStore, video: ExoVideo, in
             NavigationSuiteScaffold(
                 layoutType = layout,
                 navigationSuiteItems = {
-                    for (t in Tab.entries) {
+                    for (t in listOf(Tab.DISCOVER, Tab.CATALOG, Tab.MINE)) {
                         val on = router.tab == t
                         item(
                             selected = on,
@@ -101,10 +103,10 @@ fun App(model: AppModel, router: Router, covers: CoverStore, video: ExoVideo, in
                 } else {
                     Modifier.windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
                 }
-                Box(clear) { TabHost(router) }
+                Box(clear) { TabHost(router, inPip) }
             }
             AnimatedVisibility(
-                visible = player.isPresented,
+                visible = player.isPresented && (!router.reelsActive || inPip),
                 enter = slideInVertically(tween(280)) { it },
                 exit = slideOutVertically(tween(240)) { it },
             ) {
@@ -117,6 +119,7 @@ fun App(model: AppModel, router: Router, covers: CoverStore, video: ExoVideo, in
 
 private fun Tab.icon(on: Boolean): ImageVector = when (this) {
     Tab.DISCOVER -> if (on) Icons.Filled.Home else Icons.Outlined.Home
+    Tab.CATALOG -> if (on) Icons.Filled.SmartDisplay else Icons.Outlined.SmartDisplay
     Tab.RANK -> if (on) Icons.Filled.Leaderboard else Icons.Outlined.Leaderboard
     Tab.NEW -> if (on) Icons.Filled.CalendarMonth else Icons.Outlined.CalendarMonth
     Tab.MINE -> if (on) Icons.Filled.Star else Icons.Outlined.StarOutline
@@ -134,7 +137,7 @@ private data class Entry(val tab: Tab, val depth: Int, val route: Route?) {
  * another tab shows, until it leaves its stack.
  */
 @Composable
-private fun TabHost(router: Router) {
+private fun TabHost(router: Router, inPip: Boolean) {
     val holder = rememberSaveableStateHolder()
     DisposableEffect(holder) {
         router.forget = { holder.removeState(it) }
@@ -163,7 +166,8 @@ private fun TabHost(router: Router) {
             Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                 when (val r = e.route) {
                     null -> when (e.tab) {
-                        Tab.DISCOVER -> DiscoverScreen()
+                        Tab.DISCOVER -> OfficialReelsScreen(inPip)
+                        Tab.CATALOG -> TheatreScreen()
                         Tab.RANK -> RankScreen()
                         Tab.NEW -> NewReleasesScreen()
                         Tab.MINE -> MineScreen()

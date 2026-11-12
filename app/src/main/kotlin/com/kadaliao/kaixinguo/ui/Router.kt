@@ -8,7 +8,8 @@ import com.kadaliao.kaixinguo.model.Session
 
 /** Tab is one of the app's tabs. */
 enum class Tab(val label: String) {
-    DISCOVER("推荐"),
+    DISCOVER("首页"),
+    CATALOG("剧场"),
     RANK("排行榜"),
     NEW("新剧"),
     MINE("我的"),
@@ -41,6 +42,9 @@ sealed interface Route {
 class Router {
     var tab by mutableStateOf(Tab.DISCOVER)
         private set
+
+    /** UI-only: the homepage is displaying the original ExoPlayer surface inline. */
+    var reelsActive by mutableStateOf(false)
     private val paths = Tab.entries.associateWith { mutableStateListOf<Route>() }
 
     /** What the search field holds, and the search whose results show. */
