@@ -4,6 +4,12 @@ import android.app.Application
 import android.content.pm.ApplicationInfo
 import android.util.Log
 import androidx.compose.runtime.snapshotFlow
+import com.kadaliao.kaixinguo.account.AccountRepository
+import com.kadaliao.kaixinguo.account.PassportRepository
+import com.kadaliao.kaixinguo.account.LocalFollows
+import com.kadaliao.kaixinguo.diagnostics.Diagnostics
+import com.kadaliao.kaixinguo.settings.AppSettings
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.media3.datasource.DefaultHttpDataSource
 import com.kadaliao.kaixinguo.covers.CoverStore
 import com.kadaliao.kaixinguo.model.AppModel
@@ -34,9 +40,28 @@ class KaixinguoApplication : Application() {
     lateinit var covers: CoverStore
         private set
     val router = Router()
+    lateinit var settings: AppSettings
+        private set
+    lateinit var account: AccountRepository
+        private set
+    lateinit var passport: PassportRepository
+        private set
+    var follows: LocalFollows? = null
+        private set
 
     override fun onCreate() {
         super.onCreate()
+        // The separate website process never starts the SDK or decoder.
+        if (Application.getProcessName() != packageName) return
+        Diagnostics.install(this)
+        settings = AppSettings(this)
+        account = AccountRepository(this)
+        passport = PassportRepository(
+            this,
+            onVerifiedCookie = { cookie -> account.signInWithOfficialWebsite(cookie) },
+            onVerifiedAppCredentials = { credentials -> account.signInWithAppPassport(credentials) },
+        )
+        Diagnostics.record("lifecycle", "app_created")
         val debug = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         if (debug) debugLogger = { Log.d("kxg", it) }
         val http = DefaultHttpDataSource.Factory()
@@ -54,15 +79,36 @@ class KaixinguoApplication : Application() {
             val scope = MainScope()
             model = AppModel(SdkCatalog(client), filesDir, cacheDir, scope, video, streams).also { m ->
                 m.artwork = covers::jpeg
+                follows = LocalFollows(m.catalog, m.scope, filesDir)
                 // The app opens where the viewer left it: the tab and pages
                 // now, the player as the first window opens. Where they are
                 // goes to disk as it changes, so the next launch finds it
                 // however this one ends.
                 router.restore(m.lastSession)
                 scope.launch { snapshotFlow { router.saveTo(m.session()) }.collect(m::saveSession) }
+                scope.launch {
+                    snapshotFlow { router.tab.name }.distinctUntilChanged().collect { tab ->
+                        Diagnostics.record("navigation", "tab_" + tab.lowercase())
+                    }
+                }
+                scope.launch {
+                    snapshotFlow {
+                        Triple(m.player.state.javaClass.simpleName, m.player.isPresented, m.player.paused)
+                    }.distinctUntilChanged().collect { (state, presented, paused) ->
+                        Diagnostics.record("player", "state_" + state.lowercase())
+                        Diagnostics.record("player", if (presented) "visible" else "hidden")
+                        if (paused) Diagnostics.record("player", "paused")
+                    }
+                }
+                scope.launch {
+                    snapshotFlow { m.home.cards.size to m.home.loading }.distinctUntilChanged().collect { (_, loading) ->
+                        Diagnostics.record("feed", if (loading) "home_loading" else "home_settled")
+                    }
+                }
             }
         } catch (e: Exception) {
             startError = e.message ?: e.toString()
+            Diagnostics.record("lifecycle", "sdk_start_failed")
             Log.e("kxg", "start", e)
         }
     }

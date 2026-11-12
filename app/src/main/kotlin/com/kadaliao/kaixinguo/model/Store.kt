@@ -70,6 +70,8 @@ class JSONFile<T : Any>(
     }
 }
 
+data class ImportResult(val added: Int = 0, val updated: Int = 0)
+
 /** JSONStore keeps a list of values in a JSON file, as [JSONFile] does; an entry it can't read is skipped. */
 class JSONStore<T>(
     file: File,
@@ -187,6 +189,34 @@ class History(dir: File) {
         store.save(list)
     }
 
+    /**
+     * Offline-only backup import. Never removes history and never uploads it.
+     * A record may replace an existing one only if expressly requested and
+     * its recorded update time is strictly newer.
+     */
+    fun importEntries(incoming: List<Watch>, preferNewer: Boolean): ImportResult {
+        val values = list.associateByTo(LinkedHashMap()) { it.seriesID }
+        var added = 0
+        var updated = 0
+        for (candidate in incoming) {
+            if (candidate.seriesID.isBlank() || candidate.episode < 1) continue
+            val current = values[candidate.seriesID]
+            if (current == null) {
+                if (values.size >= MAX) continue
+                values[candidate.seriesID] = candidate
+                added++
+            } else if (preferNewer && candidate.updated > current.updated) {
+                values[candidate.seriesID] = candidate
+                updated++
+            }
+        }
+        if (added != 0 || updated != 0) {
+            list = values.values.sortedByDescending { it.updated }.take(MAX)
+            store.save(list)
+        }
+        return ImportResult(added, updated)
+    }
+
     fun flush() = store.flush()
 }
 
@@ -263,6 +293,32 @@ class Favorites(dir: File) {
         if (!ids.remove(id)) return
         list = list.filter { it.seriesID != id }
         store.save(list)
+    }
+
+    /** Merge local favorites without silently deleting or uploading anything. */
+    fun importEntries(incoming: List<Fav>, preferNewer: Boolean): ImportResult {
+        val values = list.associateByTo(LinkedHashMap()) { it.seriesID }
+        var added = 0
+        var updated = 0
+        for (candidate in incoming) {
+            if (candidate.seriesID.isBlank()) continue
+            val old = values[candidate.seriesID]
+            if (old == null) {
+                if (values.size >= 1200) continue
+                values[candidate.seriesID] = candidate
+                added++
+            } else if (preferNewer && candidate.added > old.added) {
+                values[candidate.seriesID] = candidate
+                updated++
+            }
+        }
+        if (added != 0 || updated != 0) {
+            list = values.values.sortedByDescending { it.added }
+            ids.clear()
+            ids.addAll(list.map { it.seriesID })
+            store.save(list)
+        }
+        return ImportResult(added, updated)
     }
 
     /** The saved series as a grid shows them, the latest first. */

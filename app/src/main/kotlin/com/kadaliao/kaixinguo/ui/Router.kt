@@ -13,21 +13,37 @@ enum class Tab(val label: String) {
     NEW("新剧"),
     MINE("我的"),
     SEARCH("搜索"),
+    REELS("刷剧"),
 }
 
 /** Route is a page a tab's stack can push. */
 sealed interface Route {
     data class Series(val id: String) : Route
+    data object Settings : Route
+    data object Account : Route
+    data object LocalFollows : Route
+    data object AccountHistory : Route
+    data object AccountBackup : Route
 
     /** The route as a session saves it. */
     val saved: String
         get() = when (this) {
             is Series -> "series:$id"
+            Settings -> "settings"
+            Account -> "account"
+            LocalFollows -> "local_follows"
+            AccountHistory -> "account_history"
+            AccountBackup -> "account_backup"
         }
 
     companion object {
         /** The route a session saved; null for one this version doesn't know. */
         fun parse(s: String): Route? {
+            if (s == "settings") return Settings
+            if (s == "account") return Account
+            if (s == "local_follows") return LocalFollows
+            if (s == "account_history") return AccountHistory
+            if (s == "account_backup") return AccountBackup
             val (kind, arg) = s.split(':', limit = 2).takeIf { it.size == 2 } ?: return null
             return when (kind) {
                 "series" -> if (arg.isNotEmpty()) Series(arg) else null

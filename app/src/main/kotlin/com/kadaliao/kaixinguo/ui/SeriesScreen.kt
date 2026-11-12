@@ -77,6 +77,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import com.kadaliao.kaixinguo.KaixinguoApplication
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -229,7 +231,9 @@ private fun About(series: Series) {
 @Composable
 private fun Actions(sp: SeriesPage, series: Series, wide: Boolean) {
     val model = LocalModel.current
+    val follows = (LocalContext.current.applicationContext as KaixinguoApplication).follows
     val saved = model.favorites.has(sp.id)
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         if (sp.episodes.isNotEmpty() && !sp.isBook) {
             val r = model.resumePoint(sp)
@@ -250,6 +254,17 @@ private fun Actions(sp: SeriesPage, series: Series, wide: Boolean) {
             Spacer(Modifier.width(6.dp))
             Text(if (saved) "已收藏" else "收藏", fontWeight = FontWeight.SemiBold)
         }
+    }
+    if (!sp.isBook && follows != null) {
+        TextButton(onClick = {
+            follows.toggle(sp.id, series.title, series.coverUrl, series.episodeCount)
+        }) {
+            Text(
+                if (follows.contains(sp.id)) "✓ 已加入本机追更 · 点击取消"
+                else "＋ 加入本机追更",
+            )
+        }
+    }
     }
 }
 

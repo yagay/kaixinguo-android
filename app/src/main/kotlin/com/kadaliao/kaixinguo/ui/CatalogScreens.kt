@@ -5,6 +5,7 @@ package com.kadaliao.kaixinguo.ui
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,10 +31,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.RemoveCircleOutline
 import androidx.compose.material.icons.outlined.StarOutline
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
@@ -51,6 +54,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
+import com.kadaliao.kaixinguo.KaixinguoApplication
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -224,9 +229,15 @@ fun HotView() {
 @Composable
 fun MineScreen() {
     val model = LocalModel.current
+    val router = LocalRouter.current
+    val follows = (LocalContext.current.applicationContext as KaixinguoApplication).follows
     val watched = model.history.list.take(30)
     val saved = model.favorites.cards
-    Page("我的") {
+    Page("我的", actions = {
+        IconButton(onClick = { router.open(Route.Settings) }) {
+            Icon(Icons.Outlined.Settings, contentDescription = "设置")
+        }
+    }) {
         CardGrid {
             if (watched.isNotEmpty()) {
                 line("watched-title") { SectionTitle("最近观看") }
@@ -238,6 +249,34 @@ fun MineScreen() {
                     ) {
                         items(watched, key = { it.seriesID }) { WatchCard(it) }
                     }
+                }
+            }
+            line("local-follows-title") {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    SectionTitle("本机追更")
+                    Text(
+                        if ((follows?.unreadCount ?: 0) > 0)
+                            "有 " + (follows?.unreadCount ?: 0) + " 部更新  ›"
+                        else "管理追更  ›",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable { router.open(Route.LocalFollows) }
+                            .padding(8.dp),
+                    )
+                }
+            }
+            if (follows?.entries?.isEmpty() != false) {
+                line("local-follows-empty") {
+                    Text(
+                        "在剧集详情点击「本机追更」，以后可以手动检查新集数",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
                 }
             }
             line("saved-title") { SectionTitle("收藏") }

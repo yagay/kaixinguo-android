@@ -15,7 +15,17 @@ import kotlin.coroutines.cancellation.CancellationException
 class Feed(
     private val scope: CoroutineScope,
     private val fetch: (suspend (cursor: String) -> FeedPage)?,
+    private val retryEmptyOnError: Boolean = true,
 ) {
+    // Preserve the original Feed(scope) { suspend page } call sites:
+    // adding a Boolean as the last primary-constructor parameter otherwise
+    // prevents Kotlin's trailing-lambda syntax from resolving to fetch.
+    constructor(
+        scope: CoroutineScope,
+        retryEmptyOnError: Boolean = true,
+        fetch: suspend (cursor: String) -> FeedPage,
+    ) : this(scope, fetch, retryEmptyOnError)
+
     var cards by mutableStateOf(emptyList<Card>())
         private set
     private var seen = HashSet<String>()
@@ -113,7 +123,7 @@ class Feed(
      * has nothing to show; then it waits for the viewer.
      */
     private fun scheduleRetry() {
-        if (cards.isNotEmpty() || tries >= 4) {
+        if (!retryEmptyOnError || cards.isNotEmpty() || tries >= 4) {
             retrying = false
             return
         }
