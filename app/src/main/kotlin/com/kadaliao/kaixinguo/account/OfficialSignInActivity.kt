@@ -114,7 +114,10 @@ class OfficialSignInActivity : ComponentActivity() {
         }
         CookieManager.getInstance().apply {
             setAcceptCookie(true)
-            setAcceptThirdPartyCookies(web, false)
+            // The official login may place its human-verification widget on a
+            // separate HTTPS origin. This isolated login process clears the
+            // entire WebView cookie jar on exit.
+            setAcceptThirdPartyCookies(web, true)
             removeAllCookies { web.loadUrl(OFFICIAL) }
         }
         root.addView(web, LinearLayout.LayoutParams(-1, 0, 1f))
