@@ -28,6 +28,7 @@ class AccountRepository internal constructor(
     private val historyGateway: WebsiteHistoryGateway = OfficialWebsiteHistoryGateway(),
     private val recommendationPort: AccountRecommendationPort = OfficialAccountRecommendations(),
     private val appGateway: AppProfileGateway = OfficialAppProfileGateway(),
+    private val appRecommendationPort: AppRecommendationPort = SignedAppRecommendations(appGateway),
 ) {
     constructor(context: Context) : this(
         AccountStore(context), OfficialWebsiteGateway(),
@@ -206,7 +207,7 @@ class AccountRepository internal constructor(
 
     /** Reset only the account recommendation attempt, not the logged-in session. */
     fun retryAccountRecommendations() {
-        if (!mutable.value.websiteSignedIn) return
+        if (!mutable.value.signedIn) return
         val attempt = recommendationMutable.value.attempt + 1
         synchronized(guard) {
             recommendationEpoch++
@@ -222,7 +223,7 @@ class AccountRepository internal constructor(
      */
     internal suspend fun fetchAccountRecommendations(cursor: String): AccountRecommendPage {
         val (token, epoch) = synchronized(guard) { generation to recommendationEpoch }
-        if (!mutable.value.websiteSignedIn) {
+        if (!mutable.value.signedIn) {
             throw AccountRecommendationException(AccountRecommendationException.Kind.EXPIRED)
         }
         if (cursor.isEmpty()) {
@@ -237,24 +238,27 @@ class AccountRepository internal constructor(
                 val saved = synchronized(guard) {
                     if (generation == token && recommendationEpoch == epoch) store.load() else null
                 } ?: throw AccountRecommendationException(AccountRecommendationException.Kind.EXPIRED)
+                val app = saved.source == SessionSource.APP
                 val proof = synchronized(guard) {
                     if (generation == token && recommendationEpoch == epoch) recommendationProof else null
-                } ?: recommendationPort.verifyBusinessIdentity(saved.cookie).also {
+                } ?: (if (app) appRecommendationPort.verifyBusinessIdentity(saved)
+                    else recommendationPort.verifyBusinessIdentity(saved.cookie)).also {
                     synchronized(guard) {
                         if (generation == token && recommendationEpoch == epoch) recommendationProof = it
                     }
                 }
                 if (!isCurrentRecommendation(token, epoch)) throw CancellationException("Account changed")
-                recommendationPort.page(saved.cookie, cursor, proof)
+                if (app) appRecommendationPort.page(saved, cursor, proof)
+                else recommendationPort.page(saved.cookie, cursor, proof)
             }
-            if (!isCurrentRecommendation(token, epoch) || !mutable.value.websiteSignedIn) {
+            if (!isCurrentRecommendation(token, epoch) || !mutable.value.signedIn) {
                 throw CancellationException("Account changed")
             }
             recommendationMutable.value = recommendationMutable.value.copy(
                 phase = AccountRecommendationPhase.READY,
-                message = "已取得红果 App 网关确认的账号推荐响应",
+                message = "已取得当前账号会话的红果「猜你喜欢」推荐；实际排序由服务器决定",
             )
-            Diagnostics.record("account_recommendations", "verified_page_loaded")
+            Diagnostics.record("account_recommendations", "credentialed_page_loaded")
             return response
         } catch (stop: CancellationException) {
             throw stop
