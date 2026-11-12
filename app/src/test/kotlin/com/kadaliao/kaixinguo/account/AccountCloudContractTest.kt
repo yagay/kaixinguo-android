@@ -49,7 +49,17 @@ class AccountCloudContractTest {
     @Test fun websiteSmsPhoneNormalizesMainlandAndInternational() {
         assertEquals("+86 13800138000", WebPassportClient.phone("13800138000"))
         assertEquals("+44 7123456789", WebPassportClient.phone("+44 7123456789"))
-        assertTrue(runCatching { WebPassportClient.phone("+447123456789") }.isFailure)
+        assertEquals("+44 7123456789", WebPassportClient.phone("+447123456789"))
+        assertEquals("+86 13800138000", WebPassportClient.phone("+8613800138000"))
+        assertTrue(runCatching { WebPassportClient.phone("+7712") }.isFailure)
+    }
+
+    @Test fun websiteSmsDiagnosticsNeverIncludeProviderContent() {
+        assertEquals("sms_http_auth_blocked", passportErrorClass(PassportHttpException(403)))
+        assertEquals("sms_http_rate_limited", passportErrorClass(PassportHttpException(429)))
+        assertEquals("sms_challenge_required", passportErrorClass(PassportException(1105, "raw server body")))
+        assertEquals("sms_code_invalid", passportErrorClass(PassportException(1102, "raw server body")))
+        assertEquals("sms_transport_or_format_error", passportErrorClass(IOException("sensitive value")))
     }
 
     @Test fun websiteSmsEncodingUsesByteLevelTransformation() {
