@@ -162,7 +162,7 @@ adb shell am start -a android.intent.action.VIEW -d "kaixinguo://search?q=重生
 
 ## 许可证
 
-[MIT](LICENSE)
+[GPL-3.0-only](LICENSE)（原始 MIT 代码及第三方版权信息见 [LICENSE-MIT-ORIGINAL](LICENSE-MIT-ORIGINAL)、[NOTICE-THIRD-PARTY.md](NOTICE-THIRD-PARTY.md)）
 
 ## 免责声明
 
