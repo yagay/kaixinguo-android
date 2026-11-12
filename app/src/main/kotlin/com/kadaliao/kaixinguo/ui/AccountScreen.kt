@@ -333,7 +333,7 @@ fun AccountScreen() {
             }
             item {
                 ListItem(
-                    headlineContent = { Text("官网账号资料") },
+                    headlineContent = { Text("账号登录资料") },
                     supportingContent = {
                         Text(
                             if (state.appSignedIn) "已验证红果 App 账号，登录态已加密保存在本机"
@@ -364,17 +364,20 @@ fun AccountScreen() {
                         Text(
                             when {
                                 !state.signedIn -> "当前未登录账号，刷剧使用普通推荐"
-                                state.appSignedIn -> "已验证 App 业务账号；账号推荐接口将独立验证，未验证前使用普通推荐"
-                                recommendation.ready -> "已获取网关验证的账号推荐。刷剧的「推荐」自动使用独立账号列表。"
-                                recommendation.message.isNotBlank() ->
-                                    recommendation.message + "；仍显示普通推荐，不冒充账号结果。"
-                                else -> "官网登录不能代替 App 业务身份。进入刷剧后将只读验证账号推荐。"
+                                recommendation.ready ->
+                                    "已使用当前账号会话取得红果「猜你喜欢」列表。刷剧的「推荐」使用独立账号源。"
+                                recommendation.blocked ->
+                                    recommendation.message + "；当前回退普通推荐，可在此重试。"
+                                state.appSignedIn ->
+                                    "已验证 App 账号，进入刷剧后将请求官方账号「猜你喜欢」接口。"
+                                else ->
+                                    "官网会话未必具备 App 账号身份。只有确认账号推荐成功才切换来源。"
                             },
                         )
                     },
                     trailingContent = {
                         TextButton(
-                            enabled = state.websiteSignedIn,
+                            enabled = state.signedIn,
                             onClick = {
                                 account.retryAccountRecommendations()
                                 router.select(Tab.REELS)
