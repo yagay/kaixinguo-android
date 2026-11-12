@@ -372,7 +372,9 @@ internal fun parseAccountRecommendationPage(
     }
     val seen = (previous.recent + candidates.map { it.id }).takeLast(80)
     val next = AccountRecommendCursor(session, nextOffset, nextFlow, seen)
-    val hasMore = nextOffset <= 600 && data.optBoolean("has_more", true)
+    // Official single-column cell/change may return has_more=false while still
+    // advancing a valid next_offset. Bound the flow rather than ending early.
+    val hasMore = nextOffset <= 600 && (nextFlow != null || data.optBoolean("has_more", true))
     return AccountRecommendPage(filtered, next.encode(), hasMore)
 }
 
