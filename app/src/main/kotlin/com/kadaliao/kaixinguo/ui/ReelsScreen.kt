@@ -49,6 +49,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kadaliao.kaixinguo.diagnostics.Diagnostics
 import com.kadaliao.kaixinguo.model.AppModel
 import com.kadaliao.kaixinguo.model.Card
 import com.kadaliao.kaixinguo.model.Fav
@@ -158,6 +159,7 @@ fun ReelsScreen(inPip: Boolean) {
                         Column(
                             Modifier.clickable {
                                 if (option != channel) {
+                                    Diagnostics.record("reels", "channel_changed")
                                     player.leave()
                                     channel = option
                                 }
@@ -182,6 +184,7 @@ fun ReelsScreen(inPip: Boolean) {
                 IconButton(
                     onClick = {
                         scope.launch {
+                            Diagnostics.record("reels", "refresh_requested")
                             player.leave()
                             feed.refresh(merging = false)
                             saveIndex(0)

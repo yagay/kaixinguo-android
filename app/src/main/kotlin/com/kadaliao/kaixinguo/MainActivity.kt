@@ -22,6 +22,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
+import com.kadaliao.kaixinguo.diagnostics.Diagnostics
 import com.kadaliao.kaixinguo.model.AppModel
 import com.kadaliao.kaixinguo.model.PlayerState
 import com.kadaliao.kaixinguo.playback.PlaybackService
@@ -57,13 +58,15 @@ class MainActivity : ComponentActivity() {
         // The launch's first window reopens the player where the viewer
         // left it, unless a link says where to go.
         val link = if (savedInstanceState == null) intent?.data?.takeIf { it.scheme == "kaixinguo" } else null
-        model.reopenPlayer(open = link == null)
+        model.reopenPlayer(open = link == null && app.settings.resumeOnLaunch)
         link?.let { open(it, model) }
         // Picture in picture follows the episode: on while it plays.
         lifecycleScope.launch {
             snapshotFlow {
                 val p = model.player
-                val wanted = p.isPresented && !p.paused && (p.state == PlayerState.Playing || p.state == PlayerState.Buffering)
+                val wanted = app.settings.automaticPictureInPicture &&
+                    p.isPresented && !p.paused &&
+                    (p.state == PlayerState.Playing || p.state == PlayerState.Buffering)
                 wanted to app.video.aspect
             }.collect { (wanted, _) ->
                 pipWanted = wanted
@@ -80,6 +83,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        Diagnostics.record("lifecycle", "activity_started")
         // Connecting to the session starts its service, which keeps the
         // episode playing with the screen off.
         val token = SessionToken(this, ComponentName(this, PlaybackService::class.java))
@@ -89,6 +93,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        Diagnostics.record("lifecycle", "activity_stopped")
         super.onStop()
         controller?.let { MediaController.releaseFuture(it) }
         controller = null
@@ -104,7 +109,8 @@ class MainActivity : ComponentActivity() {
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         // Before Android 12 the app starts picture in picture itself.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S && pipWanted && canPip()) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S &&
+            app.settings.automaticPictureInPicture && pipWanted && canPip()) {
             runCatching { enterPictureInPictureMode(pipParams(true)) }
         }
     }

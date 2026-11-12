@@ -182,6 +182,8 @@ private fun TabHost(router: Router, inPip: Boolean) {
                         Tab.REELS -> ReelsScreen(inPip)
                     }
                     is Route.Series -> SeriesScreen(r.id)
+                    Route.Settings -> SettingsScreen()
+                    Route.Account -> AccountScreen()
                 }
             }
         }

@@ -37,6 +37,13 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".account.OfficialSignInActivity"
+            android:exported="false"
+            android:process=":account_login"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.Kaixinguo" />
+
         <service
             android:name=".playback.PlaybackService"
             android:exported="true"

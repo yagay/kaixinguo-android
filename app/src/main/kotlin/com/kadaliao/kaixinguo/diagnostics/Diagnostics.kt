@@ -7,7 +7,9 @@ import android.os.Process
 import com.kadaliao.kaixinguo.KaixinguoApplication
 import java.io.ByteArrayOutputStream
 import java.time.Instant
+import java.io.File
 import java.util.ArrayDeque
+import java.util.concurrent.Executors
 
 /**
  * App-owned, bounded diagnostic events. All events are explicitly typed with
@@ -21,17 +23,39 @@ object Diagnostics {
     private val entries = ArrayDeque<Entry>()
     private const val LIMIT = 500
     private val allowed = Regex("[a-z0-9_]{1,48}")
+    private val writer = Executors.newSingleThreadExecutor { task ->
+        Thread(task, "kxg-diagnostics").apply { isDaemon = true }
+    }
+    private var journal: File? = null
+
+    @Synchronized
+    fun install(context: Context) {
+        journal = File(context.noBackupFilesDir, "kxg-diagnostics-events.log")
+    }
 
     @Synchronized
     fun record(area: String, action: String) {
         if (!allowed.matches(area) || !allowed.matches(action)) return
         while (entries.size >= LIMIT) entries.removeFirst()
-        entries.addLast(Entry(Instant.now().toString(), area, action))
+        val entry = Entry(Instant.now().toString(), area, action)
+        entries.addLast(entry)
+        val path = journal
+        if (path != null) writer.execute {
+            runCatching {
+                if (path.length() > 160 * 1024) {
+                    val last = path.readText().takeLast(64 * 1024).substringAfter('\n', "")
+                    path.writeText(last)
+                }
+                path.appendText(entry.at + " [" + entry.area + "] " + entry.action + "\n")
+            }
+        }
     }
 
     @Synchronized
     fun clear() {
         entries.clear()
+        val path = journal
+        if (path != null) writer.execute { runCatching { path.delete() } }
         record("diagnostics", "cleared")
     }
 
@@ -86,10 +110,14 @@ object Diagnostics {
         includeProcessLogcat: Boolean,
     ) {
         val logcat = if (includeProcessLogcat) ownProcessLogcat() else ""
+        val previous = runCatching { journal?.takeIf { it.exists() }?.readText().orEmpty() }
+            .getOrDefault("")
         val writer = context.contentResolver.openOutputStream(uri, "wt")
             ?: throw IllegalStateException("Unable to write diagnostic document")
         writer.bufferedWriter(Charsets.UTF_8).use {
             it.write(snapshot)
+            it.write("\n\n=== Persisted previous-session events (up to 160 KiB) ===\n")
+            it.write(previous)
             if (includeProcessLogcat) {
                 it.write("\n\n=== Optional current-process logcat (best-effort redaction) ===\n")
                 it.write(logcat)

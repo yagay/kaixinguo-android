@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
@@ -113,11 +114,15 @@ fun cellWidth(): Dp = if (isWide()) 150.dp else 104.dp
 
 /** Page is a tab's own page: its title in a bar, over what it shows. */
 @Composable
-fun Page(title: String, content: @Composable BoxScope.() -> Unit) {
+fun Page(
+    title: String,
+    actions: @Composable RowScope.() -> Unit = {},
+    content: @Composable BoxScope.() -> Unit,
+) {
     val bar = TopAppBarDefaults.pinnedScrollBehavior()
     Scaffold(
         modifier = Modifier.nestedScroll(bar.nestedScrollConnection),
-        topBar = { TopAppBar(title = { Text(title, fontWeight = FontWeight.Bold) }, scrollBehavior = bar) },
+        topBar = { TopAppBar(title = { Text(title, fontWeight = FontWeight.Bold) }, actions = actions, scrollBehavior = bar) },
         contentWindowInsets = WindowInsets(0),
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize(), content = content)

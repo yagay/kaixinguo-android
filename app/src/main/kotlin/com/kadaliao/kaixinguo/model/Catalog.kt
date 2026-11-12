@@ -19,6 +19,7 @@ import dev.openhongguo.SeriesSummary
 import dev.openhongguo.ShortRankQuery
 import dev.openhongguo.ShortRanking
 import dev.openhongguo.Suggestion
+import com.kadaliao.kaixinguo.diagnostics.Diagnostics
 import java.io.IOException
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -58,6 +59,7 @@ class SdkCatalog(private val client: OpenhongguoClient) : Catalog {
 /** Says what went wrong in the viewer's words. */
 fun friendly(error: Throwable?): String {
     if (error == null) return ""
+    Diagnostics.record("catalog", "error_displayed")
     if (error is OpenhongguoException) {
         return when (error.code) {
             ErrorCode.TRANSPORT -> "网络连接不稳定，请稍后重试"

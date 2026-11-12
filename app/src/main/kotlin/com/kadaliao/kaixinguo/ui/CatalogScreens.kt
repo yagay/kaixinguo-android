@@ -30,10 +30,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.RemoveCircleOutline
 import androidx.compose.material.icons.outlined.StarOutline
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
@@ -224,9 +226,14 @@ fun HotView() {
 @Composable
 fun MineScreen() {
     val model = LocalModel.current
+    val router = LocalRouter.current
     val watched = model.history.list.take(30)
     val saved = model.favorites.cards
-    Page("我的") {
+    Page("我的", actions = {
+        IconButton(onClick = { router.open(Route.Settings) }) {
+            Icon(Icons.Outlined.Settings, contentDescription = "设置")
+        }
+    }) {
         CardGrid {
             if (watched.isNotEmpty()) {
                 line("watched-title") { SectionTitle("最近观看") }
