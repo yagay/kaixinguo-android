@@ -179,7 +179,11 @@ internal class AppSmsLogin(
             url.port !in listOf(-1, 443) || url.path != endpoint || url.toURI().userInfo != null ||
             request.method != (if (form) "POST" else "GET") ||
             !(request.body contentEqualsNullable body)) throw IOException("App 请求签名未通过本地校验")
+        val required = setOf("x-gorgon", "x-khronos", "x-helios", "x-medusa")
+        val present = request.headers.filterValues { it.isNotBlank() }.keys.map { it.lowercase() }.toSet()
+        if (!present.containsAll(required)) throw IOException("App Passport 缺少有效签名头")
         val received = transport.exchange(request)
+        if (received.status !in 200..299) throw PassportHttpException(received.status)
         for (line in received.setCookies) {
             val name = line.substringBefore('=').trim()
             val token = line.substringBefore(';').substringAfter('=', "").trim()
