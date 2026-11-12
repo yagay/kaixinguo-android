@@ -131,6 +131,35 @@ class LocalFollows internal constructor(
         Diagnostics.record("follows", "local_follow_removed")
     }
 
+    /** Import a user-selected local backup; no cloud subscription mutation. */
+    fun importEntries(incoming: List<FollowEntry>, preferNewer: Boolean): Pair<Int, Int> {
+        val values = entries.associateByTo(LinkedHashMap()) { it.id }
+        var added = 0
+        var updated = 0
+        for (candidate in incoming) {
+            if (!candidate.id.matches(Regex("[0-9]{1,30}"))) continue
+            val old = values[candidate.id]
+            if (old == null) {
+                if (values.size >= 300) continue
+                values[candidate.id] = candidate
+                added++
+            } else if (preferNewer && candidate.checkedAt > old.checkedAt) {
+                val latest = maxOf(old.latestEpisodes, candidate.latestEpisodes)
+                values[candidate.id] = candidate.copy(
+                    latestEpisodes = latest,
+                    seenEpisodes = candidate.seenEpisodes.coerceAtMost(latest),
+                )
+                updated++
+            }
+        }
+        if (added != 0 || updated != 0) {
+            entries = values.values.take(300)
+            storage.save(entries)
+            Diagnostics.record("follows", "local_backup_imported")
+        }
+        return added to updated
+    }
+
     fun markRead(id: String) {
         val next = entries.map {
             if (it.id == id) it.copy(seenEpisodes = it.latestEpisodes) else it
