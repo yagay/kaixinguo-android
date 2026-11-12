@@ -12,6 +12,7 @@ data class AccountUiState(
     val profile: WebsiteProfile? = null,
     val hasSavedSession: Boolean = false,
     val message: String = "",
+    val verifiedAtEpochMs: Long = 0L,
 ) {
     val websiteSignedIn: Boolean get() = phase == AccountPhase.WEBSITE_SIGNED_IN
 }

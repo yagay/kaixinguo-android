@@ -23,6 +23,7 @@ sealed interface Route {
     data object Account : Route
     data object LocalFollows : Route
     data object AccountHistory : Route
+    data object AccountBackup : Route
 
     /** The route as a session saves it. */
     val saved: String
@@ -32,6 +33,7 @@ sealed interface Route {
             Account -> "account"
             LocalFollows -> "local_follows"
             AccountHistory -> "account_history"
+            AccountBackup -> "account_backup"
         }
 
     companion object {
@@ -41,6 +43,7 @@ sealed interface Route {
             if (s == "account") return Account
             if (s == "local_follows") return LocalFollows
             if (s == "account_history") return AccountHistory
+            if (s == "account_backup") return AccountBackup
             val (kind, arg) = s.split(':', limit = 2).takeIf { it.size == 2 } ?: return null
             return when (kind) {
                 "series" -> if (arg.isNotEmpty()) Series(arg) else null

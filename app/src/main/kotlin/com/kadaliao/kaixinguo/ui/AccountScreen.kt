@@ -45,6 +45,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.kadaliao.kaixinguo.KaixinguoApplication
@@ -126,9 +129,17 @@ fun AccountScreen() {
                     supportingContent = {
                         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             if (state.message.isNotBlank()) Text(state.message)
-                            if (state.websiteSignedIn) Text(
-                                "注意：网站账号认证不等于红果 App 的云端账号已连接。",
-                            )
+                            if (state.websiteSignedIn) {
+                                Text("注意：网站账号认证不等于红果 App 的云端账号已连接。")
+                                if (state.verifiedAtEpochMs > 0) {
+                                    val checkedAt = remember(state.verifiedAtEpochMs) {
+                                        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+                                            .withZone(ZoneId.systemDefault())
+                                            .format(Instant.ofEpochMilli(state.verifiedAtEpochMs))
+                                    }
+                                    Text("官网核验时间：" + checkedAt)
+                                }
+                            }
                         }
                     },
                     trailingContent = {
@@ -273,6 +284,19 @@ fun AccountScreen() {
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            item {
+                ListItem(
+                    headlineContent = { Text("本机数据备份与恢复") },
+                    supportingContent = {
+                        Text("导出或手动合并本机收藏、观看历史和追更记录；不会包含账号登录态。")
+                    },
+                    trailingContent = {
+                        TextButton(onClick = { router.open(Route.AccountBackup) }) {
+                            Text("管理")
+                        }
+                    },
                 )
             }
             item {

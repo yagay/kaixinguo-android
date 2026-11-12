@@ -104,6 +104,7 @@ class AccountRepository internal constructor(
                     profile = profile,
                     hasSavedSession = true,
                     message = "官网账号已验证；红果 App 云端资料尚未连接",
+                    verifiedAtEpochMs = saved.verifiedAtEpochMs,
                 )
                 Diagnostics.record("account", "website_verified")
             } catch (_: WebsiteAuthException) {
@@ -180,6 +181,7 @@ class AccountRepository internal constructor(
                 phase = AccountPhase.WEBSITE_SIGNED_IN,
                 profile = profile, hasSavedSession = true,
                 message = "官网账号已恢复；云端收藏和历史尚未连接",
+                verifiedAtEpochMs = System.currentTimeMillis(),
             )
             Diagnostics.record("account", "restored_verified")
         } catch (_: WebsiteAuthException) {
