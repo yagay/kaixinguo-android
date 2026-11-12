@@ -27,6 +27,7 @@ class AccountRepository internal constructor(
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val historyGateway: WebsiteHistoryGateway = OfficialWebsiteHistoryGateway(),
     private val recommendationPort: AccountRecommendationPort = OfficialAccountRecommendations(),
+    private val appGateway: AppProfileGateway = OfficialAppProfileGateway(),
 ) {
     constructor(context: Context) : this(
         AccountStore(context), OfficialWebsiteGateway(),
@@ -133,6 +134,60 @@ class AccountRepository internal constructor(
                     message = "官网账号核验暂不可用，请检查网络后重新登录",
                 )
                 Diagnostics.record("account", "website_verification_unavailable")
+            }
+        }
+    }
+
+    /**
+     * App Passport and website Passport are different credentials. Verify the
+     * signed App business identity before saving the App cookie in KeyStore.
+     */
+    internal fun signInWithAppPassport(credentials: com.hongguo.account.protocol.AccountCredentials) {
+        val previous = mutable.value.hasSavedSession
+        val token = synchronized(guard) { ++generation }
+        historyMutable.value = WebsiteHistoryUiState()
+        resetRecommendations()
+        mutable.value = AccountUiState(
+            phase = AccountPhase.VERIFYING,
+            hasSavedSession = previous,
+            sessionRevision = token,
+            message = "短信验证已完成，正在验证红果 App 账号身份…",
+        )
+        Diagnostics.record("account", "app_login_credentials_received")
+        scope.launch {
+            try {
+                val profile = withContext(io) {
+                    appGateway.verify(credentials.cookie, credentials.deviceId, credentials.installId)
+                }
+                if (!isCurrent(token)) return@launch
+                val saved = StoredWebsiteSession(
+                    credentials.cookie, profile.nickname, profile.websiteUserId,
+                    System.currentTimeMillis(), source = SessionSource.APP,
+                    deviceId = credentials.deviceId, installId = credentials.installId,
+                )
+                val persisted = withContext(io) {
+                    synchronized(guard) {
+                        if (generation != token) false
+                        else { store.save(saved); true }
+                    }
+                }
+                if (!persisted || !isCurrent(token)) return@launch
+                mutable.value = AccountUiState(
+                    phase = AccountPhase.APP_SIGNED_IN,
+                    profile = profile, hasSavedSession = true,
+                    message = "已验证红果 App 账号；本机播放与缓存保持独立",
+                    verifiedAtEpochMs = saved.verifiedAtEpochMs,
+                    sessionRevision = token,
+                )
+                Diagnostics.record("account", "app_login_profile_verified")
+            } catch (_: Exception) {
+                if (!isCurrent(token)) return@launch
+                mutable.value = AccountUiState(
+                    phase = AccountPhase.UNAVAILABLE,
+                    sessionRevision = token, hasSavedSession = previous,
+                    message = "App 短信登录态未通过业务账号验证；请使用官网验证或稍后重试",
+                )
+                Diagnostics.record("account", "app_login_profile_unverified")
             }
         }
     }
@@ -277,7 +332,7 @@ class AccountRepository internal constructor(
         }
         recommendationMutable.value = AccountRecommendationState()
         mutable.value = AccountUiState(
-            message = "已退出官网账号，本机收藏和历史未清除",
+            message = "已退出账号，本机收藏和历史未清除",
             sessionRevision = token,
         )
         historyMutable.value = WebsiteHistoryUiState()
@@ -286,12 +341,18 @@ class AccountRepository internal constructor(
 
     private suspend fun verifySaved(saved: StoredWebsiteSession, token: Long) {
         try {
-            val profile = withContext(io) { gateway.verify(saved.cookie) }
+            val profile = withContext(io) {
+                if (saved.source == SessionSource.APP)
+                    appGateway.verify(saved.cookie, saved.deviceId, saved.installId)
+                else gateway.verify(saved.cookie)
+            }
             if (!isCurrent(token)) return
             mutable.value = AccountUiState(
-                phase = AccountPhase.WEBSITE_SIGNED_IN,
+                phase = if (saved.source == SessionSource.APP)
+                    AccountPhase.APP_SIGNED_IN else AccountPhase.WEBSITE_SIGNED_IN,
                 profile = profile, hasSavedSession = true,
-                message = "官网账号已恢复；云端收藏和历史尚未连接",
+                message = if (saved.source == SessionSource.APP)
+                    "已恢复红果 App 账号并验证身份" else "官网账号已恢复；云端收藏和历史尚未连接",
                 verifiedAtEpochMs = System.currentTimeMillis(),
                 sessionRevision = token,
             )
