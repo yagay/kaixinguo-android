@@ -5,6 +5,7 @@ import android.content.pm.ApplicationInfo
 import android.util.Log
 import androidx.compose.runtime.snapshotFlow
 import com.kadaliao.kaixinguo.account.AccountRepository
+import com.kadaliao.kaixinguo.account.PassportRepository
 import com.kadaliao.kaixinguo.diagnostics.Diagnostics
 import com.kadaliao.kaixinguo.settings.AppSettings
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -42,6 +43,8 @@ class KaixinguoApplication : Application() {
         private set
     lateinit var account: AccountRepository
         private set
+    lateinit var passport: PassportRepository
+        private set
 
     override fun onCreate() {
         super.onCreate()
@@ -50,6 +53,9 @@ class KaixinguoApplication : Application() {
         Diagnostics.install(this)
         settings = AppSettings(this)
         account = AccountRepository(this)
+        passport = PassportRepository(this) { cookie ->
+            account.signInWithOfficialWebsite(cookie)
+        }
         Diagnostics.record("lifecycle", "app_created")
         val debug = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         if (debug) debugLogger = { Log.d("kxg", it) }

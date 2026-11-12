@@ -4,16 +4,25 @@ import android.app.Activity
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
@@ -22,16 +31,25 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.kadaliao.kaixinguo.KaixinguoApplication
 import com.kadaliao.kaixinguo.account.AccountPhase
+import com.kadaliao.kaixinguo.account.PassportPhase
 import com.kadaliao.kaixinguo.account.OfficialSignInActivity
 
 @Composable
@@ -39,7 +57,19 @@ fun AccountScreen() {
     val context = LocalContext.current
     val app = context.applicationContext as KaixinguoApplication
     val account = app.account
+    val passport = app.passport
     val state by account.state.collectAsState()
+    val passportState by passport.state.collectAsState()
+    var loginMode by remember { mutableIntStateOf(0) }
+    var phone by remember { mutableStateOf("") }
+    var smsCode by remember { mutableStateOf("") }
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(passportState.qrExpiresAt, passportState.smsRetryAt) {
+        while (true) {
+            now = System.currentTimeMillis()
+            delay(1000)
+        }
+    }
     var askSignOut by remember { mutableStateOf(false) }
 
     val startOfficialLogin = rememberLauncherForActivityResult(
@@ -47,7 +77,10 @@ fun AccountScreen() {
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val cookie = result.data?.getStringExtra(OfficialSignInActivity.EXTRA_WEBSITE_SESSION)
-            if (!cookie.isNullOrBlank()) account.signInWithOfficialWebsite(cookie)
+            if (!cookie.isNullOrBlank()) {
+                passport.cancel()
+                account.signInWithOfficialWebsite(cookie)
+            }
         }
     }
     if (askSignOut) {
@@ -56,7 +89,7 @@ fun AccountScreen() {
             title = { Text("退出红果官网账号？") },
             text = { Text("只会删除本机加密保存的登录态，原有本机收藏和观看历史保持不变。") },
             confirmButton = {
-                TextButton(onClick = { askSignOut = false; account.signOut() }) {
+                TextButton(onClick = { askSignOut = false; passport.cancel(); account.signOut() }) {
                     Text("退出登录")
                 }
             },
@@ -109,11 +142,104 @@ fun AccountScreen() {
                         enabled = state.phase != AccountPhase.VERIFYING &&
                             state.phase != AccountPhase.RESTORING,
                         onClick = {
+                            passport.cancel()
                             startOfficialLogin.launch(
                                 Intent(context, OfficialSignInActivity::class.java),
                             )
                         },
                     ) { Text(if (state.websiteSignedIn) "重新登录官网" else "打开红果官网登录") }
+
+
+                    Spacer(Modifier.height(12.dp))
+                    Text("其他登录方式", style = MaterialTheme.typography.titleSmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = loginMode == 0,
+                            onClick = { if (loginMode != 0) { passport.cancel(); loginMode = 0 } },
+                            label = { Text("扫码登录") },
+                        )
+                        FilterChip(
+                            selected = loginMode == 1,
+                            onClick = { if (loginMode != 1) { passport.cancel(); loginMode = 1 } },
+                            label = { Text("短信验证码") },
+                        )
+                    }
+                    if (loginMode == 0) {
+                        val qr = passportState.qrImage
+                        val bitmap = remember(qr) {
+                            qr?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+                        }
+                        if (bitmap != null) {
+                            Image(
+                                bitmap = bitmap.asImageBitmap(),
+                                contentDescription = "红果账号登录二维码",
+                                modifier = Modifier.size(220.dp).align(Alignment.CenterHorizontally),
+                            )
+                            if (passportState.qrExpiresAt > 0) {
+                                val seconds = ((passportState.qrExpiresAt - now + 999) / 1000).coerceAtLeast(0)
+                                Text("二维码有效期剩余 " + seconds + " 秒")
+                            }
+                        }
+                        OutlinedButton(
+                            onClick = passport::qrLogin,
+                            enabled = !passportState.busy,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(if (qr != null) "重新获取二维码" else "获取扫码二维码")
+                        }
+                    } else {
+                        OutlinedTextField(
+                            value = phone,
+                            onValueChange = { phone = it.take(32) },
+                            label = { Text("手机号（大陆11位，或 +国家代码 空格 号码）") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        val waitSeconds = ((passportState.smsRetryAt - now + 999) / 1000).coerceAtLeast(0)
+                        OutlinedButton(
+                            onClick = { passport.sendSms(phone) },
+                            enabled = !passportState.busy && waitSeconds == 0L,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(if (waitSeconds > 0) "请等待 " + waitSeconds + " 秒" else "发送登录验证码")
+                        }
+                        if (passportState.phase == PassportPhase.SMS_SENT ||
+                            passportState.phase == PassportPhase.SMS_VERIFYING) {
+                            Text("验证码已发送至 " + passportState.maskedPhone)
+                            OutlinedTextField(
+                                value = smsCode,
+                                onValueChange = { smsCode = it.filter(Char::isDigit).take(8) },
+                                label = { Text("短信验证码") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Button(
+                                onClick = { val submitted = smsCode; smsCode = ""; passport.verifySms(submitted) },
+                                enabled = smsCode.length in 4..8 && !passportState.busy,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Text("验证并登录") }
+                        }
+                    }
+                    if (passportState.message.isNotBlank()) {
+                        Text(
+                            passportState.message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (passportState.phase in listOf(
+                        PassportPhase.QR_LOADING, PassportPhase.SMS_SENDING,
+                        PassportPhase.SMS_VERIFYING,
+                    )) {
+                        CircularProgressIndicator()
+                    }
+                    if (passportState.phase != PassportPhase.IDLE) {
+                        TextButton(onClick = { passport.cancel(); smsCode = "" }) {
+                            Text("取消当前登录")
+                        }
+                    }
 
                     if (state.hasSavedSession) {
                         TextButton(

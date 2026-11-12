@@ -257,7 +257,7 @@ internal class WebPassportClient {
             ((it.toInt() and 255) xor 5).toString(16).padStart(2, '0')
         }
         private fun safe(url: URL) = url.protocol == "https" && url.host == "hongguoduanju.com" &&
-            url.userInfo == null && url.port in listOf(-1, 443)
+            url.toURI().userInfo == null && url.port in listOf(-1, 443)
     }
 }
 
