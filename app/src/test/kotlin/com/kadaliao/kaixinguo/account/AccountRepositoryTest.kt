@@ -92,6 +92,30 @@ class AccountRepositoryTest {
     }
 
     @Test
+    fun failedReloginPreservesPreviousEncryptedSession() = runTest {
+        val old = StoredWebsiteSession("sessionid=old", "原账号", "old-id", 1)
+        val store = MemoryStore(old)
+        var allow = true
+        val repo = AccountRepository(
+            store,
+            Gateway {
+                if (!allow) throw WebsiteAuthException()
+                WebsiteProfile("原账号", "old-id")
+            },
+            this,
+            StandardTestDispatcher(testScheduler),
+        )
+        advanceUntilIdle()
+        assertEquals(AccountPhase.WEBSITE_SIGNED_IN, repo.state.value.phase)
+        allow = false
+        repo.signInWithOfficialWebsite("sessionid=new")
+        advanceUntilIdle()
+        assertEquals(AccountPhase.EXPIRED, repo.state.value.phase)
+        assertTrue(repo.state.value.hasSavedSession)
+        assertEquals("sessionid=old", store.session?.cookie)
+    }
+
+    @Test
     fun profileParserRejectsExplicitSignedOutStatusEvenWithUserId() {
         val raw = JSONObject(
             """{"message":"success","data":{"has_login":false,"user_info":{"user_id":"42"}}}""",

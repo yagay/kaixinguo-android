@@ -65,12 +65,17 @@ class AccountRepository internal constructor(
     }
 
     fun signInWithOfficialWebsite(cookie: String) {
+        val hadSavedSession = mutable.value.hasSavedSession
         if (cookie.isBlank() || cookie.length > 16384) {
-            mutable.value = AccountUiState(message = "没有取得有效的官网登录会话")
+            mutable.value = mutable.value.copy(message = "没有取得有效的官网登录会话")
             return
         }
         val token = synchronized(guard) { ++generation }
-        mutable.value = AccountUiState(phase = AccountPhase.VERIFYING, message = "正在核验官网账号…")
+        mutable.value = AccountUiState(
+            phase = AccountPhase.VERIFYING,
+            hasSavedSession = hadSavedSession,
+            message = "正在核验官网账号…",
+        )
         Diagnostics.record("account", "official_login_received")
         scope.launch {
             try {
@@ -99,12 +104,14 @@ class AccountRepository internal constructor(
             } catch (_: WebsiteAuthException) {
                 if (isCurrent(token)) mutable.value = AccountUiState(
                     phase = AccountPhase.EXPIRED,
+                    hasSavedSession = hadSavedSession,
                     message = "官网未确认登录，请重新打开官网登录页面完成验证",
                 )
                 Diagnostics.record("account", "website_rejected")
             } catch (_: Exception) {
                 if (isCurrent(token)) mutable.value = AccountUiState(
                     phase = AccountPhase.UNAVAILABLE,
+                    hasSavedSession = hadSavedSession,
                     message = "官网账号核验暂不可用，请检查网络后重新登录",
                 )
                 Diagnostics.record("account", "website_verification_unavailable")
