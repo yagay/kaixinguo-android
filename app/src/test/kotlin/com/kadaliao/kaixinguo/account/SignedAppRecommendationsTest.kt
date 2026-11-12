@@ -1,5 +1,6 @@
 package com.kadaliao.kaixinguo.account
 
+import com.hongguo.account.protocol.parseObject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -54,6 +55,13 @@ class SignedAppRecommendationsTest {
         assertEquals(listOf("400001"), page.cards.map { it.id })
         assertEquals("账号推荐", page.cards[0].sub)
         assertEquals("page-1", AccountRecommendCursor.parse(page.cursor).session)
+    }
+
+    @Test fun largeNumericSeriesIdStaysExactInAccountRecommendations() {
+        val raw = """{"code":0,"data":{"tab_item":[{"tab_type":16,"session_id":"x","cell_data":[{"cell_data":[{"video_data":[{"video_detail":{"series_id":9223372036854775808,"series_title":"长编号短剧"}}]}]}]}]}}"""
+        val body = parseObject(raw)
+        val page = parseAccountRecommendationPage(body, AccountRecommendCursor())
+        assertEquals("9223372036854775808", page.cards.single().id)
     }
 
     @Test fun websiteSessionDoesNotGainAppRecommendationPrivileges() {
