@@ -5,6 +5,7 @@ import com.hongguo.account.protocol.ProtocolTransport
 import com.hongguo.account.protocol.Signer
 import com.hongguo.account.protocol.VendorConstants
 import com.hongguo.account.protocol.cloudResponse
+import com.hongguo.account.protocol.parseObject
 import com.kadaliao.kaixinguo.diagnostics.Diagnostics
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -101,7 +102,7 @@ internal class SignedAppRecommendationHttp(
                 val response = try {
                     transport.execute(request) {
                         AccountHttpReply(it.code, it.header("X-Tt-Agw-Login"),
-                            JSONObject(cloudResponse(it, 16 * 1024 * 1024)))
+                            parseObject(cloudResponse(it, 16 * 1024 * 1024)))
                     }
                 } catch (e: AccountProtocolException) {
                     val kind = when (e.errorCode) {
