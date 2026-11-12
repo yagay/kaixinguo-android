@@ -177,7 +177,7 @@ internal class AppSmsLogin(
         val url = runCatching { URL(request.url) }.getOrNull()
         if (url == null || url.protocol != "https" || url.host != "security.snssdk.com" ||
             url.port !in listOf(-1, 443) || url.path != endpoint || url.toURI().userInfo != null ||
-            request.method != if (form) "POST" else "GET" ||
+            request.method != (if (form) "POST" else "GET") ||
             !(request.body contentEqualsNullable body)) throw IOException("App 请求签名未通过本地校验")
         val received = transport.exchange(request)
         for (line in received.setCookies) {
