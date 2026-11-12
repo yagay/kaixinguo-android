@@ -13,6 +13,7 @@ data class AccountUiState(
     val hasSavedSession: Boolean = false,
     val message: String = "",
     val verifiedAtEpochMs: Long = 0L,
+    val sessionRevision: Long = 0L,
 ) {
     val websiteSignedIn: Boolean get() = phase == AccountPhase.WEBSITE_SIGNED_IN
 }
@@ -48,3 +49,27 @@ data class WebsiteHistoryUiState(
     val loaded: Boolean = false,
     val error: String = "",
 )
+
+
+/**
+ * Only App gateway-confirmed business sessions can advertise a connected
+ * account feed. Website login alone is insufficient.
+ */
+enum class AccountRecommendationPhase {
+    IDLE, CHECKING, READY, UNVERIFIED, SIGNATURE_REQUIRED, EXPIRED, RATE_LIMITED, UNAVAILABLE,
+}
+
+data class AccountRecommendationState(
+    val phase: AccountRecommendationPhase = AccountRecommendationPhase.IDLE,
+    val attempt: Int = 0,
+    val message: String = "",
+) {
+    val ready: Boolean get() = phase == AccountRecommendationPhase.READY
+    val blocked: Boolean get() = phase in setOf(
+        AccountRecommendationPhase.UNVERIFIED,
+        AccountRecommendationPhase.SIGNATURE_REQUIRED,
+        AccountRecommendationPhase.EXPIRED,
+        AccountRecommendationPhase.RATE_LIMITED,
+        AccountRecommendationPhase.UNAVAILABLE,
+    )
+}
