@@ -59,6 +59,9 @@ internal class AccountStore(context: Context) : AccountPersistence {
             json.optString("nickname").take(120),
             json.optString("website_user_id").take(128),
             json.optLong("verified_at", 0L),
+            source = if (json.optString("source") == "APP") SessionSource.APP else SessionSource.WEBSITE,
+            deviceId = json.optString("device_id").take(30),
+            installId = json.optString("install_id").take(30),
         )
     }
 
@@ -68,6 +71,9 @@ internal class AccountStore(context: Context) : AccountPersistence {
             .put("nickname", session.nickname)
             .put("website_user_id", session.websiteUserId)
             .put("verified_at", session.verifiedAtEpochMs)
+            .put("source", session.source.name)
+            .put("device_id", session.deviceId)
+            .put("install_id", session.installId)
             .toString().toByteArray(Charsets.UTF_8)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, secretKey())
