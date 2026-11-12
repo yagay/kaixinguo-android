@@ -74,8 +74,11 @@ internal class WebPassportClient {
         active()
         if (System.currentTimeMillis() < retryAt) throw IOException("请等待发送倒计时结束")
         val parsed = phone(number)
-        // Website security challenges are honored; no automatic workaround.
-        if ("passport_csrf_token" !in jar) startQr()
+        // SMS must not depend on a QR-code request, QR image, or QR token.
+        // Visit the same official origin once to collect CSRF cookies before
+        // attempting the site's ordinary SMS endpoint. The user's browser
+        // handles any challenge; this API never bypasses one.
+        prepareSmsCookies()
         val result = checked(call("/passport/web/send_code/", form = mapOf(
             "mobile" to xorHex(parsed), "type" to xorHex("24"),
             "mix_mode" to "1", "fixed_mix_mode" to "1",
@@ -87,6 +90,14 @@ internal class WebPassportClient {
         retryAt = System.currentTimeMillis() + seconds * 1000L
         val digits = parsed.substringAfter(' ')
         return SmsReceipt(digits.take(3) + "****" + digits.takeLast(4), retryAt)
+    }
+
+    private fun prepareSmsCookies() {
+        if (jar["passport_csrf_token"]?.expiresAt?.let { it > System.currentTimeMillis() } == true) return
+        val (_, redirect) = execute(URL("$ORIGIN/"), null, readBody = false)
+        // Don't follow off-origin redirects or read the homepage's HTML into
+        // memory. The SMS call itself will report any remaining challenge.
+        if (redirect != null && safe(redirect)) execute(redirect, null, readBody = false)
     }
 
     fun verifySms(code: String): String {
@@ -155,7 +166,11 @@ internal class WebPassportClient {
         return try { JSONObject(body) } catch (_: Exception) { throw IOException("登录响应格式异常") }
     }
 
-    private fun execute(url: URL, form: Map<String, String>?): Pair<String, URL?> {
+    private fun execute(
+        url: URL,
+        form: Map<String, String>?,
+        readBody: Boolean = true,
+    ): Pair<String, URL?> {
         active()
         if (!safe(url)) throw IOException("已拒绝非官方网站的登录跳转")
         val conn = url.openConnection() as HttpsURLConnection
@@ -193,7 +208,8 @@ internal class WebPassportClient {
                 val location = conn.getHeaderField("Location") ?: throw IOException("登录跳转缺少地址")
                 return "" to URL(url, location)
             }
-            if (status !in 200..299) throw IOException("认证服务器暂不可用（HTTP " + status + "）")
+            if (status !in 200..299) throw PassportHttpException(status)
+            if (!readBody) return "" to null
             val out = ByteArrayOutputStream()
             conn.inputStream.use { stream ->
                 val bytes = ByteArray(4096)
@@ -243,7 +259,18 @@ internal class WebPassportClient {
             val text = number.trim()
             val digits = text.filter(Char::isDigit)
             if (text.startsWith("+")) {
-                val chunks = text.drop(1).trim().split(Regex("\\s+"), limit = 2)
+                // Common compact E.164 pastes are accepted for the two
+                // documented country codes. Other codes remain explicit.
+                val compact = text.drop(1).filter(Char::isDigit)
+                val chunks = when {
+                    text.drop(1).trim().contains(Regex("\\s")) ->
+                        text.drop(1).trim().split(Regex("\\s+"), limit = 2)
+                    compact.startsWith("86") && compact.length == 13 ->
+                        listOf("86", compact.drop(2))
+                    compact.startsWith("44") && compact.length in 12..13 ->
+                        listOf("44", compact.drop(2))
+                    else -> emptyList()
+                }
                 require(chunks.size == 2 && chunks[0].length in 1..3 &&
                     chunks[1].filter(Char::isDigit).length in 5..13 &&
                     digits.length in 8..15) { "国际号码请填写 +国家代码 空格 手机号" }
@@ -262,3 +289,6 @@ internal class WebPassportClient {
 }
 
 internal class PassportException(val code: Int, message: String) : IOException(message)
+
+/** Stable HTTP status only; never attach an upstream URL or response body. */
+internal class PassportHttpException(val status: Int) : IOException("认证服务 HTTP $status")
